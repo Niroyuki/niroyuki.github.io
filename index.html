@@ -2,12 +2,216 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-<ul>
-  <li><a href="https://niroyuki.github.io/code_artifact.html/">code_artifact</a></li>
-  <li><a href="https://niroyuki.github.io/hex_probability_arena.html/">hex_probability_arena.html</a></li>
-  <li><a href="https://niroyuki.github.io/libra.html/">libra</a></li>
-  <li><a href="https://niroyuki.github.io/sandloop/">sandloop</a></li>
-</ul>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Artifacts & Projects Index</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: M PLUS Rounded 1c -->
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800;900&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            font-family: 'M PLUS Rounded 1c', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #f0fdf4 100%);
+        }
+        .card-hover {
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px -6px rgba(14, 165, 233, 0.18), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .card-hover:active {
+            transform: translateY(-1px);
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-800 flex flex-col justify-between p-4 sm:p-6 md:p-10">
+
+    <div class="max-w-3xl mx-auto w-full flex-1 flex flex-col">
+
+        <!-- Header -->
+        <header class="text-center my-6 md:my-10">
+            <div class="inline-flex items-center gap-3 bg-white/80 backdrop-blur-md px-6 py-3 rounded-full shadow-sm border border-sky-200/80 mb-4">
+                <i data-lucide="compass" class="w-7 h-7 text-sky-500 animate-spin-slow"></i>
+                <span class="text-sm sm:text-base font-bold text-sky-700 tracking-wide">PORTAL INDEX</span>
+            </div>
+            <h1 class="text-3xl sm:text-5xl font-black text-slate-800 tracking-tight mb-3">
+                Web アプリ・教材 ポータル
+            </h1>
+            <p class="text-base sm:text-lg font-bold text-slate-500">
+                作成したコンテンツやツールのリンク一覧です
+            </p>
+        </header>
+
+        <!-- Search & Info Bar -->
+        <div class="mb-6">
+            <div class="relative">
+                <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-6 h-6 text-slate-400"></i>
+                <input type="text" id="searchInput" oninput="filterLinks()" placeholder="リンク名で検索..." 
+                       class="w-full pl-12 pr-4 py-4 rounded-2xl bg-white/90 backdrop-blur-sm border-2 border-sky-100 font-bold text-lg text-slate-700 shadow-sm focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100 transition">
+            </div>
+        </div>
+
+        <!-- Links Grid -->
+        <main id="linksContainer" class="grid grid-cols-1 gap-4 sm:gap-5 flex-1">
+            <!-- Dynamic JavaScript Content Generation -->
+        </main>
+
+    </div>
+
+    <!-- Footer -->
+    <footer class="mt-12 text-center text-xs sm:text-sm font-bold text-slate-400">
+        <p>© niroyuki.github.io • All rights reserved</p>
+    </footer>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white font-bold px-6 py-3 rounded-full shadow-2xl transition-all duration-300 transform translate-y-20 opacity-0 pointer-events-none flex items-center gap-2 z-50">
+        <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-400"></i>
+        <span id="toastText">URLをコピーしました！</span>
+    </div>
+
+    <script>
+        // Link Data Array
+        const linkData = [
+            {
+                title: "Code Artifact",
+                filename: "code_artifact.html",
+                url: "https://niroyuki.github.io/code_artifact.html",
+                desc: "コード生成・成果物表示ツール",
+                icon: "code-2",
+                tag: "Tool",
+                color: "from-sky-500 to-indigo-500"
+            },
+            {
+                title: "Hex Probability Arena",
+                filename: "hex_probability_arena.html",
+                url: "https://niroyuki.github.io/hex_probability_arena.html",
+                desc: "ヘックス盤面を用いた確率シミュレーション",
+                icon: "hexagon",
+                tag: "Simulation",
+                color: "from-purple-500 to-pink-500"
+            },
+            {
+                title: "Libra（てんびん学習教材）",
+                filename: "libra.html",
+                url: "https://niroyuki.github.io/libra.html",
+                desc: "小学生向け おもさとつりあいの体感学習アプリ",
+                icon: "scale",
+                tag: "Education",
+                color: "from-amber-500 to-emerald-500"
+            },
+            {
+                title: "Sandloop",
+                filename: "sandloop.html",
+                url: "https://niroyuki.github.io/sandloop.html",
+                desc: "インタラクティブな砂のルーツ・ループツール",
+                icon: "hourglass",
+                tag: "Interactive",
+                color: "from-teal-500 to-cyan-500"
+            }
+        ];
+
+        function renderLinks(items) {
+            const container = document.getElementById('linksContainer');
+            if (!container) return;
+
+            if (items.length === 0) {
+                container.innerHTML = `
+                    <div class="bg-white/80 rounded-3xl p-8 text-center border-2 border-slate-200 text-slate-400 font-bold">
+                        一致するリンクが見つかりませんでした 🔍
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = items.map(item => `
+                <div class="card-hover bg-white rounded-3xl p-5 sm:p-6 border-2 border-sky-100 shadow-sm relative group flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    
+                    <!-- Main Clickable Area -->
+                    <a href="${item.url}" class="flex-1 flex items-center gap-4 w-full">
+                        <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br ${item.color} flex items-center justify-center text-white shadow-md shrink-0">
+                            <i data-lucide="${item.icon}" class="w-7 h-7 sm:w-8 sm:h-8"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 mb-1 flex-wrap">
+                                <h2 class="text-xl sm:text-2xl font-black text-slate-800 group-hover:text-sky-600 transition truncate">
+                                    ${item.title}
+                                </h2>
+                                <span class="text-[11px] font-extrabold px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-slate-200">
+                                    ${item.tag}
+                                </span>
+                            </div>
+                            <p class="text-xs sm:text-sm font-bold text-slate-400 truncate">
+                                ${item.desc}
+                            </p>
+                        </div>
+                    </a>
+
+                    <!-- Action Buttons -->
+                    <div class="flex items-center gap-2 w-full sm:w-auto justify-end border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100">
+                        <!-- Copy URL Button -->
+                        <button onclick="copyToClipboard('${item.url}')" title="URLをコピー" 
+                                class="p-3 rounded-xl bg-slate-50 hover:bg-sky-50 text-slate-500 hover:text-sky-600 font-bold text-sm border border-slate-200 hover:border-sky-300 transition flex items-center gap-1.5 active:scale-95">
+                            <i data-lucide="copy" class="w-4 h-4"></i>
+                            <span class="sm:hidden text-xs">コピー</span>
+                        </button>
+                        
+                        <!-- Open Link Button -->
+                        <a href="${item.url}" 
+                           class="px-5 py-3 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-black text-sm sm:text-base shadow-sm hover:shadow transition flex items-center gap-2 active:scale-95 shrink-0">
+                            <span>ひらく</span>
+                            <i data-lucide="arrow-up-right" class="w-5 h-5"></i>
+                        </a>
+                    </div>
+
+                </div>
+            `).join('');
+
+            // Re-initialize Lucide Icons
+            lucide.createIcons();
+        }
+
+        function filterLinks() {
+            const query = document.getElementById('searchInput').value.toLowerCase().trim();
+            const filtered = linkData.filter(item => 
+                item.title.toLowerCase().includes(query) || 
+                item.filename.toLowerCase().includes(query) ||
+                item.desc.toLowerCase().includes(query)
+            );
+            renderLinks(filtered);
+        }
+
+        function copyToClipboard(text) {
+            const tempInput = document.createElement('input');
+            tempInput.value = text;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+
+            showToast("URLをコピーしました！");
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            const toastText = document.getElementById('toastText');
+            if (!toast || !toastText) return;
+
+            toastText.innerText = message;
+            toast.classList.remove('translate-y-20', 'opacity-0', 'pointer-events-none');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-20', 'opacity-0', 'pointer-events-none');
+            }, 2500);
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            renderLinks(linkData);
+        });
     </script>
 </body>
 </html>
