@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>フラッシュ暗算トレーニング</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    @keyframes pulse-fast {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+    .flash-num {
+      animation: pulse-fast 0.15s ease-in-out;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-white min-h-screen flex flex-col items-center justify-center p-4 font-sans">
+
+  <div class="max-w-xl w-full bg-slate-800 rounded-2xl shadow-2xl border border-slate-700 p-6 md:p-8 flex flex-col gap-6">
+    
+    <!-- ヘッダー -->
+    <div class="text-center">
+      <h1 class="text-3xl font-extrabold text-amber-400 tracking-wider flex items-center justify-center gap-2">
+        <i class="fa-solid font-bolt text-yellow-400"></i> フラッシュ暗算
+      </h1>
+      <p class="text-slate-400 text-sm mt-1">脳を鍛える！スピード計算トレーニング</p>
+    </div>
+
+    <!-- 設定パネル (スタンバイ画面時のみ表示) -->
+    <div id="setup-panel" class="flex flex-col gap-5">
+      
+      <!-- 1. 難易度設定 -->
+      <div>
+        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+          1. 難易度（コース）を選択
+        </label>
+        <div class="grid grid-cols-5 gap-1.5 sm:gap-2" id="course-buttons">
+          <button data-course="sweet" class="course-btn py-2.5 px-1 text-xs sm:text-sm font-bold rounded-xl border border-emerald-500/40 bg-slate-700 hover:bg-emerald-600/30 text-emerald-300 transition-all text-center">甘口</button>
+          <button data-course="medium" class="course-btn py-2.5 px-1 text-xs sm:text-sm font-bold rounded-xl border border-blue-500/40 bg-slate-700 hover:bg-blue-600/30 text-blue-300 transition-all text-center">中辛</button>
+          <button data-course="spicy" class="course-btn py-2.5 px-1 text-xs sm:text-sm font-bold rounded-xl border border-amber-500/40 bg-slate-700 hover:bg-amber-600/30 text-amber-300 transition-all text-center">辛口</button>
+          <button data-course="extreme" class="course-btn py-2.5 px-1 text-xs sm:text-sm font-bold rounded-xl border border-rose-500/40 bg-slate-700 hover:bg-rose-600/30 text-rose-300 transition-all text-center">激辛</button>
+          <button data-course="magma" class="course-btn py-2.5 px-1 text-xs sm:text-sm font-bold rounded-xl border border-purple-500/40 bg-slate-700 hover:bg-purple-600/30 text-purple-300 transition-all text-center">マグマ</button>
+        </div>
+
+        <!-- 選択中難易度のイメージ表示エリア -->
+        <div id="course-description" class="mt-3 p-3.5 bg-slate-900/80 rounded-xl border border-slate-700/80 text-sm flex items-start gap-3">
+          <div id="course-icon" class="text-2xl mt-0.5"></div>
+          <div class="flex-1">
+            <div class="flex justify-between items-center mb-1">
+              <span id="course-title" class="font-bold text-amber-400">コース名</span>
+              <span id="course-stats" class="text-xs bg-slate-800 px-2 py-0.5 rounded text-slate-300 font-mono">表示間隔: - 秒</span>
+            </div>
+            <p id="course-detail" class="text-slate-300 text-xs sm:text-sm leading-relaxed"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. 桁数設定 -->
+      <div>
+        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+          2. 桁数を固定またはランダム
+        </label>
+        <div class="grid grid-cols-4 gap-2" id="digit-buttons">
+          <button data-digit="1" class="digit-btn py-2 text-xs sm:text-sm font-bold rounded-xl border border-slate-600 bg-slate-700 text-slate-300 hover:bg-slate-600">1桁</button>
+          <button data-digit="2" class="digit-btn py-2 text-xs sm:text-sm font-bold rounded-xl border border-slate-600 bg-slate-700 text-slate-300 hover:bg-slate-600">2桁</button>
+          <button data-digit="3" class="digit-btn py-2 text-xs sm:text-sm font-bold rounded-xl border border-slate-600 bg-slate-700 text-slate-300 hover:bg-slate-600">3桁</button>
+          <button data-digit="random" class="digit-btn py-2 text-xs sm:text-sm font-bold rounded-xl border border-slate-600 bg-slate-700 text-slate-300 hover:bg-slate-600">1~3桁</button>
+        </div>
+      </div>
+
+      <!-- 3. 問題数設定 -->
+      <div>
+        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+          3. 出題数を指定
+        </label>
+        <div class="grid grid-cols-4 gap-2" id="count-buttons">
+          <button data-count="5" class="count-btn py-2 text-xs sm:text-sm font-bold rounded-xl border border-slate-600 bg-slate-700 text-slate-300 hover:bg-slate-600">5個</button>
+          <button data-count="10" class="count-btn py-2 text-xs sm:text-sm font-bold rounded-xl border border-slate-600 bg-slate-700 text-slate-300 hover:bg-slate-600">10個</button>
+          <button data-count="15" class="count-btn py-2 text-xs sm:text-sm font-bold rounded-xl border border-slate-600 bg-slate-700 text-slate-300 hover:bg-slate-600">15個</button>
+          <button data-count="20" class="count-btn py-2 text-xs sm:text-sm font-bold rounded-xl border border-slate-600 bg-slate-700 text-slate-300 hover:bg-slate-600">20個</button>
+        </div>
+      </div>
+
+      <!-- スタートボタン -->
+      <button id="start-btn" class="w-full py-4 mt-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black text-xl rounded-xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2">
+        <i class="fa-solid fa-play"></i> スタート
+      </button>
+    </div>
+
+    <!-- フラッシュ表示表示エリア（非表示から表示へ切り替え） -->
+    <div id="flash-screen" class="hidden flex-col items-center justify-center py-12 relative min-h-[260px] bg-slate-950 rounded-xl border border-slate-800">
+      <div id="progress-indicator" class="absolute top-4 left-4 text-xs font-mono text-slate-500"></div>
+      <div id="flash-display" class="text-7xl sm:text-8xl font-black text-amber-400 font-mono tracking-wider"></div>
+    </div>
+
+    <!-- 回答入力パネル（問題終了後に表示） -->
+    <div id="answer-panel" class="hidden flex-col gap-4">
+      <div class="text-center">
+        <h2 class="text-xl font-bold text-slate-200">計算結果を入力してください</h2>
+        <p class="text-xs text-slate-400 mt-1">合計はいくつになりましたか？</p>
+      </div>
+
+      <div class="flex gap-2">
+        <input type="number" id="answer-input" placeholder="回答を入力" class="flex-1 bg-slate-900 border-2 border-slate-700 rounded-xl px-4 py-3 text-2xl font-bold text-center text-white focus:outline-none focus:border-amber-500" focus />
+        <button id="submit-btn" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-6 py-3 rounded-xl transition-all">
+          答え合わせ
+        </button>
+      </div>
+    </div>
+
+    <!-- 結果画面（正解・不正解） -->
+    <div id="result-panel" class="hidden flex-col items-center justify-center gap-4 text-center py-4">
+      <div id="result-badge" class="text-2xl font-black px-6 py-2 rounded-full"></div>
+      
+      <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-700 w-full flex flex-col gap-2">
+        <div class="flex justify-between items-center text-sm border-b border-slate-800 pb-2">
+          <span class="text-slate-400">あなたの回答:</span>
+          <span id="user-answer-val" class="font-bold text-xl text-white"></span>
+        </div>
+        <div class="flex justify-between items-center text-sm">
+          <span class="text-slate-400">正解:</span>
+          <span id="correct-answer-val" class="font-bold text-xl text-emerald-400"></span>
+        </div>
+      </div>
+
+      <!-- 出題番号一覧 -->
+      <div class="w-full text-left">
+        <button id="toggle-numbers-btn" class="text-xs text-amber-400 hover:underline flex items-center gap-1 my-1">
+          <i class="fa-solid fa-list"></i> 出題された数値一覧を見る
+        </button>
+        <div id="numbers-history" class="hidden mt-2 p-3 bg-slate-950 rounded-lg text-xs text-slate-300 font-mono flex flex-wrap gap-2 max-h-32 overflow-y-auto border border-slate-800"></div>
+      </div>
+
+      <button id="retry-btn" class="w-full py-3.5 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-xl transition-all mt-2">
+        もう一度挑戦する
+      </button>
+    </div>
+
+  </div>
+
+  <script>
+    // 難易度設定マスターデータ
+    const COURSE_DATA = {
+      sweet: {
+        name: '甘口',
+        speed: 1500, // ms
+        icon: '🌱',
+        titleColor: 'text-emerald-400',
+        activeClass: 'bg-emerald-600 text-white border-emerald-400 shadow-lg shadow-emerald-900/50',
+        detail: 'じっくり落ち着いて計算できる初心者向け。表示時間が長いので、そろばんや筆算のイメージを組み立てやすいレベルです。'
+      },
+      medium: {
+        name: '中辛',
+        speed: 1000, // ms
+        icon: '🍊',
+        titleColor: 'text-blue-400',
+        activeClass: 'bg-blue-600 text-white border-blue-400 shadow-lg shadow-blue-900/50',
+        detail: '標準的なスピード（秒間1数字）。テンポよく計算する感覚を掴むのに最適な設定です。'
+      },
+      spicy: {
+        name: '辛口',
+        speed: 600, // ms
+        icon: '🌶️',
+        titleColor: 'text-amber-400',
+        activeClass: 'bg-amber-600 text-white border-amber-400 shadow-lg shadow-amber-900/50',
+        detail: 'リズムよくテンポを上げる上級者向け。文字を「読む」のではなく「直感で捉える」訓練になります。'
+      },
+      extreme: {
+        name: '激辛',
+        speed: 300, // ms
+        icon: '🔥',
+        titleColor: 'text-rose-400',
+        activeClass: 'bg-rose-600 text-white border-rose-400 shadow-lg shadow-rose-900/50',
+        detail: '瞬間的な直感が必要なプロ向け。目の残像を利用して素早くイメージ処理をする高次元のスピード感です。'
+      },
+      magma: {
+        name: 'マグマ',
+        speed: 150, // ms
+        icon: '🌋',
+        titleColor: 'text-purple-400',
+        activeClass: 'bg-purple-600 text-white border-purple-400 shadow-lg shadow-purple-900/50',
+        detail: '残像で捉える超高速の世界！脳の極限に挑みたい人のための超スピードチャレンジです。'
+      }
+    };
+
+    // 状態管理
+    let currentCourse = 'medium';
+    let currentDigit = 'random'; // '1', '2', '3', 'random'
+    let currentCount = 10;       // 5, 10, 15, 20
+    let generatedNumbers = [];
+    let correctAnswer = 0;
+
+    // DOM要素の取得
+    const setupPanel = document.getElementById('setup-panel');
+    const flashScreen = document.getElementById('flash-screen');
+    const flashDisplay = document.getElementById('flash-display');
+    const progressIndicator = document.getElementById('progress-indicator');
+    const answerPanel = document.getElementById('answer-panel');
+    const answerInput = document.getElementById('answer-input');
+    const resultPanel = document.getElementById('result-panel');
+    const startBtn = document.getElementById('start-btn');
+    const submitBtn = document.getElementById('submit-btn');
+    const retryBtn = document.getElementById('retry-btn');
+    const toggleNumbersBtn = document.getElementById('toggle-numbers-btn');
+    const numbersHistory = document.getElementById('numbers-history');
+
+    // UIの初期化
+    function init() {
+      setupEventListeners();
+      selectCourse('medium');
+      selectDigit('random');
+      selectCount(10);
+    }
+
+    function setupEventListeners() {
+      // 難易度ボタンイベント
+      document.querySelectorAll('.course-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          selectCourse(btn.dataset.course);
+        });
+      });
+
+      // 桁数ボタンイベント
+      document.querySelectorAll('.digit-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          selectDigit(btn.dataset.digit);
+        });
+      });
+
+      // 問題数ボタンイベント
+      document.querySelectorAll('.count-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          selectCount(parseInt(btn.dataset.count, 10));
+        });
+      });
+
+      // スタートボタン
+      startBtn.addEventListener('click', startGame);
+
+      // 答え合わせボタン
+      submitBtn.addEventListener('click', checkAnswer);
+      answerInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') checkAnswer();
+      });
+
+      // リトライボタン
+      retryBtn.addEventListener('click', resetToSetup);
+
+      // 数字一覧トグル
+      toggleNumbersBtn.addEventListener('click', () => {
+        numbersHistory.classList.toggle('hidden');
+      });
+    }
+
+    // 難易度選択処理
+    function selectCourse(courseKey) {
+      currentCourse = courseKey;
+      const data = COURSE_DATA[courseKey];
+
+      // ボタンのアクティブ状態の切り替え
+      document.querySelectorAll('.course-btn').forEach(btn => {
+        const isCurrent = btn.dataset.course === courseKey;
+        // 全クラスのリセット
+        btn.className = 'course-btn py-2.5 px-1 text-xs sm:text-sm font-bold rounded-xl border transition-all text-center ';
+        if (isCurrent) {
+          btn.className += data.activeClass;
+        } else {
+          btn.className += 'border-slate-700 bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white';
+        }
+      });
+
+      // 難易度イメージ（説明）カードの更新
+      document.getElementById('course-icon').textContent = data.icon;
+      
+      const titleEl = document.getElementById('course-title');
+      titleEl.textContent = `${data.name}コース`;
+      titleEl.className = `font-bold text-base ${data.titleColor}`;
+
+      const secVal = (data.speed / 1000).toFixed(2).replace(/\.?0+$/, '');
+      const totalSec = ((data.speed * currentCount) / 1000).toFixed(1);
+      document.getElementById('course-stats').textContent = `間隔: ${secVal}秒 / 所要時間: 約${totalSec}秒`;
+      document.getElementById('course-detail').textContent = data.detail;
+    }
+
+    // 桁数選択処理
+    function selectDigit(digitKey) {
+      currentDigit = digitKey;
+      document.querySelectorAll('.digit-btn').forEach(btn => {
+        if (btn.dataset.digit === digitKey) {
+          btn.className = 'digit-btn py-2 text-xs sm:text-sm font-bold rounded-xl border-2 border-amber-500 bg-amber-500/20 text-amber-300';
+        } else {
+          btn.className = 'digit-btn py-2 text-xs sm:text-sm font-bold rounded-xl border border-slate-700 bg-slate-800 text-slate-400 hover:bg-slate-700';
+        }
+      });
+    }
+
+    // 問題数選択処理
+    function selectCount(countVal) {
+      currentCount = countVal;
+      document.querySelectorAll('.count-btn').forEach(btn => {
+        if (parseInt(btn.dataset.count, 10) === countVal) {
+          btn.className = 'count-btn py-2 text-xs sm:text-sm font-bold rounded-xl border-2 border-amber-500 bg-amber-500/20 text-amber-300';
+        } else {
+          btn.className = 'count-btn py-2 text-xs sm:text-sm font-bold rounded-xl border border-slate-700 bg-slate-800 text-slate-400 hover:bg-slate-700';
+        }
+      });
+
+      // 時間更新のために難易度表示も更新
+      selectCourse(currentCourse);
+    }
+
+    // 数値生成
+    function generateNumbers() {
+      generatedNumbers = [];
+      for (let i = 0; i < currentCount; i++) {
+        let num = 0;
+        let d = currentDigit;
+        
+        if (d === 'random') {
+          const randChoice = Math.floor(Math.random() * 3) + 1;
+          d = randChoice.toString();
+        }
+
+        if (d === '1') {
+          num = Math.floor(Math.random() * 9) + 1; // 1~9
+        } else if (d === '2') {
+          num = Math.floor(Math.random() * 90) + 10; // 10~99
+        } else if (d === '3') {
+          num = Math.floor(Math.random() * 900) + 100; // 100~999
+        }
+
+        generatedNumbers.push(num);
+      }
+      correctAnswer = generatedNumbers.reduce((acc, val) => acc + val, 0);
+    }
+
+    // ゲーム開始
+    function startGame() {
+      generateNumbers();
+
+      // UI切り替え
+      setupPanel.classList.add('hidden');
+      flashScreen.classList.remove('hidden');
+      flashScreen.classList.add('flex');
+
+      // カウントダウン開始
+      let countdown = 3;
+      flashDisplay.textContent = countdown;
+      flashDisplay.className = 'text-7xl font-black text-amber-400';
+      progressIndicator.textContent = '準備...';
+
+      const countInterval = setInterval(() => {
+        countdown--;
+        if (countdown > 0) {
+          flashDisplay.textContent = countdown;
+        } else {
+          clearInterval(countInterval);
+          runFlashSequence();
+        }
+      }, 800);
+    }
+
+    // フラッシュシーケンス
+    function runFlashSequence() {
+      let index = 0;
+      const speed = COURSE_DATA[currentCourse].speed;
+
+      // 表示時間と一瞬の消去（黒画面）時間を設定
+      // スピードに合わせて全体時間の25%（最低40ms）を消去時間に充てる
+      const blankTime = Math.max(40, Math.floor(speed * 0.25));
+      const displayTime = speed - blankTime;
+
+      function showNextNumber() {
+        if (index >= generatedNumbers.length) {
+          // 終了後、回答画面へ
+          flashDisplay.textContent = '';
+          flashScreen.classList.add('hidden');
+          flashScreen.classList.remove('flex');
+          
+          answerPanel.classList.remove('hidden');
+          answerPanel.classList.add('flex');
+          answerInput.value = '';
+          answerInput.focus();
+          return;
+        }
+
+        progressIndicator.textContent = `${index + 1} / ${generatedNumbers.length}`;
+        
+        // フラッシュ表示
+        flashDisplay.textContent = generatedNumbers[index];
+        flashDisplay.className = 'text-7xl sm:text-8xl font-black text-amber-400 font-mono flash-num';
+
+        // 表示時間が終わったら一瞬文字を消去し、ブランク時間後に次の数字を表示
+        setTimeout(() => {
+          flashDisplay.textContent = '';
+          index++;
+          setTimeout(showNextNumber, blankTime);
+        }, displayTime);
+      }
+
+      showNextNumber();
+    }
+
+    // 答え合わせ
+    function checkAnswer() {
+      const userVal = parseInt(answerInput.value, 10);
+      if (isNaN(userVal)) return;
+
+      answerPanel.classList.add('hidden');
+      answerPanel.classList.remove('flex');
+
+      resultPanel.classList.remove('hidden');
+      resultPanel.classList.add('flex');
+
+      document.getElementById('user-answer-val').textContent = userVal.toLocaleString();
+      document.getElementById('correct-answer-val').textContent = correctAnswer.toLocaleString();
+
+      const badge = document.getElementById('result-badge');
+      if (userVal === correctAnswer) {
+        badge.textContent = '🎉 正解！おめでとうございます！';
+        badge.className = 'text-xl sm:text-2xl font-black px-6 py-2 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40';
+      } else {
+        badge.textContent = '❌ 残念！不正解';
+        badge.className = 'text-xl sm:text-2xl font-black px-6 py-2 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/40';
+      }
+
+      // 履歴一覧表示設定
+      numbersHistory.innerHTML = generatedNumbers
+        .map((n, i) => `<span class="bg-slate-900 border border-slate-800 px-2 py-1 rounded text-slate-300"><span class="text-slate-500 text-[10px] mr-1">#${i+1}</span>${n}</span>`)
+        .join('');
+      numbersHistory.classList.add('hidden');
+    }
+
+    // 初期状態に戻る
+    function resetToSetup() {
+      resultPanel.classList.add('hidden');
+      resultPanel.classList.remove('flex');
+      setupPanel.classList.remove('hidden');
+      setupPanel.classList.add('flex');
+    }
+
+    // 起動処理
+    window.onload = init;
+  </script>
+</body>
+</html>

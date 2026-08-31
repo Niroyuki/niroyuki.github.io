@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>踊る人形の暗号解読 (The Dancing Men Cipher)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Noto+Serif+JP:wght@400;600;700&family=Special+Elite&display=swap');
+
+        body {
+            font-family: 'Noto Serif JP', serif;
+            background-color: #12100e;
+            color: #e5dada;
+            background-image: radial-gradient(#241f1c 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+
+        .font-vintage {
+            font-family: 'Cinzel', serif;
+        }
+
+        .font-typewriter {
+            font-family: 'Special Elite', monospace;
+        }
+
+        /* 踊る人形のホバー発光エフェクト */
+        .dancing-card {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .dancing-card.highlighted {
+            transform: translateY(-4px) scale(1.05);
+            border-color: #f59e0b;
+            box-shadow: 0 0 15px rgba(245, 158, 11, 0.5);
+            background-color: #2a2015;
+        }
+
+        .dancing-card.selected {
+            border-color: #3b82f6;
+            box-shadow: 0 0 18px rgba(59, 130, 246, 0.7);
+            background-color: #1e293b;
+        }
+
+        /* カスタムスクロールバー */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1c1815;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #443831;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #635248;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between select-none pb-28 md:pb-32">
+
+    <!-- ヘッダー -->
+    <header class="border-b border-amber-900/40 bg-stone-950/90 backdrop-blur-md sticky top-0 z-30 px-4 py-3 shadow-md">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="p-2 bg-amber-900/30 rounded-lg border border-amber-700/50 text-amber-500">
+                    <i data-lucide="search" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl md:text-2xl font-bold font-vintage tracking-wider text-amber-200">
+                        THE DANCING MEN CIPHER
+                    </h1>
+                    <p class="text-xs text-amber-500/80 font-mono">シャーロック・ホームズ：踊る人形暗号解読システム</p>
+                </div>
+            </div>
+
+            <!-- 操作コントロールボタン -->
+            <div class="flex flex-wrap items-center gap-2 text-sm">
+                <select id="text-selector" class="bg-stone-900 border border-amber-800/60 rounded px-3 py-1.5 text-amber-100 text-xs md:text-sm focus:outline-none focus:border-amber-500">
+                    <option value="0">事件1: ベイカー街の教訓 (長文・標準)</option>
+                    <option value="1">事件2: 踊る人形の脅迫状 (短文)</option>
+                    <option value="2">事件3: 削除不能な事実 (難解・長文)</option>
+                </select>
+
+                <button id="btn-freq" class="flex items-center gap-1.5 px-3 py-1.5 bg-stone-800 hover:bg-stone-700 border border-stone-600 rounded text-amber-200 transition text-xs md:text-sm">
+                    <i data-lucide="bar-chart-2" class="w-4 h-4"></i>
+                    <span>頻度分析</span>
+                </button>
+
+                <button id="btn-hint" class="flex items-center gap-1.5 px-3 py-1.5 bg-amber-950 hover:bg-amber-900 border border-amber-700/60 rounded text-amber-300 transition text-xs md:text-sm">
+                    <i data-lucide="lightbulb" class="w-4 h-4"></i>
+                    <span>ヒント</span>
+                </button>
+
+                <button id="btn-reset" class="flex items-center gap-1.5 px-3 py-1.5 bg-rose-950/60 hover:bg-rose-900/60 border border-rose-800/60 rounded text-rose-300 transition text-xs md:text-sm">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                    <span>リセット</span>
+                </button>
+
+                <button id="btn-check" class="flex items-center gap-1.5 px-4 py-1.5 bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold rounded shadow-lg shadow-amber-600/20 transition text-xs md:text-sm">
+                    <i data-lucide="check-circle" class="w-4 h-4"></i>
+                    <span>検証</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <main class="max-w-7xl mx-auto w-full px-4 py-6 flex-grow flex flex-col gap-6">
+
+        <!-- 暗号解読進捗パネル -->
+        <div class="bg-stone-900/60 border border-amber-900/30 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center space-x-4">
+                <div class="text-xs text-stone-400">
+                    進捗状況: <span id="completion-rate" class="text-lg font-bold text-amber-400 font-mono">0%</span>
+                </div>
+                <div class="w-32 md:w-48 bg-stone-950 h-2.5 rounded-full overflow-hidden border border-stone-800">
+                    <div id="progress-bar" class="bg-amber-500 h-full w-0 transition-all duration-300"></div>
+                </div>
+            </div>
+            
+            <div class="text-xs text-stone-400 flex flex-wrap items-center gap-x-4 gap-y-1">
+                <span><kbd class="px-1.5 py-0.5 bg-stone-800 border border-stone-700 rounded text-amber-300">クリック</kbd> で選択</span>
+                <span><kbd class="px-1.5 py-0.5 bg-stone-800 border border-stone-700 rounded text-amber-300">A-Z</kbd> で入力</span>
+                <span class="text-amber-500/90 font-mono">※単語の最後の文字の人形には「手旗」が付きます</span>
+            </div>
+        </div>
+
+        <!-- 暗号表示メインエリア -->
+        <div id="cipher-container" class="bg-stone-950/80 border border-amber-900/40 rounded-xl p-6 md:p-8 min-h-[400px] flex flex-wrap gap-x-6 gap-y-8 items-start align-content-start shadow-inner">
+            <!-- JavaScriptによって動的に「踊る人形ブロック」が生成されます -->
+        </div>
+
+    </main>
+
+    <!-- 画面下部に固定されるオンスクリーン仮想キーボード -->
+    <div class="fixed bottom-0 left-0 right-0 z-40 bg-stone-950/95 border-t border-amber-900/40 backdrop-blur-md p-3 md:p-4 shadow-2xl">
+        <div class="max-w-4xl mx-auto space-y-2">
+            <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-stone-400 pb-1">
+                <span class="font-mono text-amber-400/90 font-semibold">アルファベット選択キーボード</span>
+                <div class="flex items-center gap-3 text-[11px]">
+                    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span> 選択中</span>
+                    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-stone-700 inline-block"></span> 未使用</span>
+                    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-stone-900 border border-stone-700 inline-block"></span> 使用済み</span>
+                </div>
+            </div>
+            <div id="virtual-keyboard" class="flex flex-wrap justify-center gap-1 md:gap-1.5 max-h-24 overflow-y-auto">
+                <!-- A-Zボタンが動的に挿入されます -->
+            </div>
+        </div>
+    </div>
+
+    <!-- モーダル: 頻度解析 -->
+    <div id="freq-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-stone-900 border border-amber-800/80 rounded-xl max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-stone-800 pb-3">
+                <h3 class="text-lg font-bold text-amber-200 flex items-center gap-2">
+                    <i data-lucide="bar-chart-2" class="w-5 h-5 text-amber-500"></i>
+                    暗号内 アルファベット出現頻度解析
+                </h3>
+                <button class="btn-close-modal text-stone-400 hover:text-white">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+            </div>
+            
+            <p class="text-xs text-stone-400">
+                一般的な英語文章では <span class="text-amber-400 font-bold font-mono">E, T, A, O, I, N, S, H, R, D, L, U</span> の順に頻出します。
+                暗号内で最も多く出現している人形は「E」や「T」である可能性が高くなります。
+            </p>
+
+            <div id="freq-chart" class="space-y-2 py-2">
+                <!-- 頻度グラフがここに表示されます -->
+            </div>
+
+            <div class="text-right pt-2 border-t border-stone-800">
+                <button class="btn-close-modal px-4 py-2 bg-amber-900/40 hover:bg-amber-800/50 border border-amber-700/50 rounded text-amber-200 text-sm">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- モーダル: 汎用お知らせダイアログ -->
+    <div id="dialog-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-stone-900 border border-amber-800/80 rounded-xl max-w-md w-full p-6 space-y-4 text-center">
+            <div id="dialog-icon" class="inline-flex p-3 bg-amber-900/30 rounded-full text-amber-400">
+                <i data-lucide="info" class="w-8 h-8"></i>
+            </div>
+            <h3 id="dialog-title" class="text-lg font-bold text-amber-200">お知らせ</h3>
+            <p id="dialog-message" class="text-sm text-stone-300 leading-relaxed"></p>
+            <div class="pt-2">
+                <button id="btn-dialog-close" class="px-6 py-2 bg-amber-700 hover:bg-amber-600 text-stone-950 font-bold rounded-lg text-sm transition">
+                    OK
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- モーダル: 確認用ダイアログ (リセット確認用) -->
+    <div id="confirm-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-stone-900 border border-amber-800/80 rounded-xl max-w-md w-full p-6 space-y-4 text-center">
+            <div class="inline-flex p-3 bg-rose-900/30 rounded-full text-rose-400">
+                <i data-lucide="alert-triangle" class="w-8 h-8"></i>
+            </div>
+            <h3 class="text-lg font-bold text-amber-200">解読内容のリセット</h3>
+            <p class="text-sm text-stone-300 leading-relaxed">
+                これまで入力した解読内容がすべて消去されます。<br>本当にリセットしますか？
+            </p>
+            <div class="flex justify-center gap-3 pt-2">
+                <button id="btn-confirm-cancel" class="px-5 py-2 bg-stone-800 hover:bg-stone-700 text-stone-300 rounded-lg text-sm transition">
+                    キャンセル
+                </button>
+                <button id="btn-confirm-ok" class="px-5 py-2 bg-rose-700 hover:bg-rose-600 text-white font-bold rounded-lg text-sm transition">
+                    リセット実行
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- モーダル: 完了・勝利画面 -->
+    <div id="win-modal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-stone-900 border-2 border-amber-500 rounded-2xl max-w-lg w-full p-8 text-center space-y-6 shadow-2xl shadow-amber-500/10">
+            <div class="inline-flex p-4 bg-amber-500/10 rounded-full border border-amber-500/30 text-amber-400 animate-bounce">
+                <i data-lucide="award" class="w-12 h-12"></i>
+            </div>
+            
+            <div class="space-y-2">
+                <h2 class="text-2xl font-bold font-vintage text-amber-200">暗号解読成功！</h2>
+                <p class="text-xs text-amber-500 font-mono">EXCELLENT WORK, HOLMES!</p>
+            </div>
+
+            <div class="bg-stone-950 p-4 rounded-lg border border-stone-800 text-left space-y-2">
+                <div class="text-xs text-stone-400 font-mono">復元された本文:</div>
+                <div id="decoded-final-text" class="text-sm font-typewriter text-amber-100 leading-relaxed italic"></div>
+            </div>
+
+            <button id="btn-win-close" class="w-full py-3 bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold rounded-lg shadow-lg shadow-amber-600/30 transition">
+                次の問題に進む
+            </button>
+        </div>
+    </div>
+
+    <!-- アプリケーション・ロジック -->
+    <script>
+        // --- 踊る人形 (Dancing Men) SVGジェネレーター ---
+        const MAN_POSES = {
+            'A': [45, -45, 30, -30, false],
+            'B': [90, -45, 45, -15, false],
+            'C': [135, 45, 15, -45, false],
+            'D': [180, -90, 30, -30, false],
+            'E': [-45, -135, 45, -45, false],
+            'F': [45, 45, 0, -30, false],
+            'G': [90, 90, 30, 0, false],
+            'H': [-90, -90, 45, -45, false],
+            'I': [0, 0, 45, -45, false],
+            'J': [135, -135, 15, -15, false],
+            'K': [45, -180, 60, -30, false],
+            'L': [90, -135, 30, -60, false],
+            'M': [180, 180, 45, -45, false],
+            'N': [-45, 45, 30, -30, false],
+            'O': [135, 135, 45, -45, false],
+            'P': [45, -90, 15, -45, false],
+            'Q': [-90, 45, 45, -15, false],
+            'R': [90, 0, 30, -30, false],
+            'S': [-135, -45, 60, -15, false],
+            'T': [0, -90, 30, -30, false],
+            'U': [45, 135, 45, -45, false],
+            'V': [-45, -45, 15, -15, false],
+            'W': [135, -45, 30, -30, false],
+            'X': [180, 0, 45, -45, false],
+            'Y': [0, 180, 30, -30, false],
+            'Z': [-135, 135, 45, -45, false]
+        };
+
+        function generateDancingManSVG(char, isWordEnd = false, strokeColor = "currentColor") {
+            const uppercaseChar = char.toUpperCase();
+            const pose = MAN_POSES[uppercaseChar] || [0, 0, 30, -30, false];
+            
+            const [lArm, rArm, lLeg, rLeg] = pose;
+            const hasFlag = isWordEnd;
+
+            const getCoords = (cx, cy, length, angleDeg) => {
+                const rad = (angleDeg - 90) * (Math.PI / 180);
+                return {
+                    x: cx + length * Math.cos(rad),
+                    y: cy + length * Math.sin(rad)
+                };
+            };
+
+            const cx = 35;
+            const headY = 18;
+            const neckY = 26;
+            const pelvisY = 48;
+            const limbLen = 16;
+
+            const lArmEnd = getCoords(cx, neckY, limbLen, lArm);
+            const rArmEnd = getCoords(cx, neckY, limbLen, rArm);
+            const lLegEnd = getCoords(cx, pelvisY, limbLen + 4, 180 - lLeg);
+            const rLegEnd = getCoords(cx, pelvisY, limbLen + 4, 180 - rLeg);
+
+            let flagSVG = '';
+            if (hasFlag) {
+                flagSVG = `
+                    <line x1="${rArmEnd.x}" y1="${rArmEnd.y}" x2="${rArmEnd.x}" y2="${rArmEnd.y - 18}" stroke="${strokeColor}" stroke-width="2" />
+                    <polygon points="${rArmEnd.x},${rArmEnd.y - 18} ${rArmEnd.x + 10},${rArmEnd.y - 13} ${rArmEnd.x},${rArmEnd.y - 8}" fill="${strokeColor}" />
+                `;
+            }
+
+            return `
+                <svg viewBox="0 0 70 80" class="w-full h-full p-1" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="${cx}" cy="${headY}" r="7" fill="none" stroke="${strokeColor}" stroke-width="2.5" />
+                    <line x1="${cx}" y1="${neckY}" x2="${cx}" y2="${pelvisY}" stroke="${strokeColor}" stroke-width="2.5" stroke-linecap="round" />
+                    <line x1="${cx}" y1="${neckY}" x2="${lArmEnd.x}" y2="${lArmEnd.y}" stroke="${strokeColor}" stroke-width="2.5" stroke-linecap="round" />
+                    <line x1="${cx}" y1="${neckY}" x2="${rArmEnd.x}" y2="${rArmEnd.y}" stroke="${strokeColor}" stroke-width="2.5" stroke-linecap="round" />
+                    <line x1="${cx}" y1="${pelvisY}" x2="${lLegEnd.x}" y2="${lLegEnd.y}" stroke="${strokeColor}" stroke-width="2.5" stroke-linecap="round" />
+                    <line x1="${cx}" y1="${pelvisY}" x2="${rLegEnd.x}" y2="${rLegEnd.y}" stroke="${strokeColor}" stroke-width="2.5" stroke-linecap="round" />
+                    ${flagSVG}
+                </svg>
+            `;
+        }
+
+        // --- ゲーム用プリセット文章 ---
+        const PRESET_TEXTS = [
+            {
+                title: "事件1: ベイカー街の教訓 (長文)",
+                text: "IT HAS LONG BEEN AN AXIOM OF MINE THAT THE LITTLE THINGS ARE INFINITELY THE MOST IMPORTANT WHEN YOU HAVE ELIMINATED THE IMPOSSIBLE WHATEVER REMAINS HOWEVER IMPROBABLE MUST BE THE TRUTH"
+            },
+            {
+                title: "事件2: 踊る人形の脅迫状 (短文)",
+                text: "AM HERE ABE SLANEY COME ELSIE COME PREPARE TO MEET THY GOD"
+            },
+            {
+                title: "事件3: 削除不能な事実 (難解・長文)",
+                text: "EDUCATION IS SIMPLY THE SOUL OF A SOCIETY AS IT PASSES FROM ONE GENERATION TO ANOTHER THERE IS NOTHING MORE DECEPTIVE THAN AN OBVIOUS FACT MY DEAR WATSON"
+            }
+        ];
+
+        // --- アプリケーションの状態管理 ---
+        class CipherGame {
+            constructor() {
+                this.currentTextIndex = 0;
+                this.originalText = "";
+                this.cipherKey = {};
+                this.reverseKey = {};
+                this.cipherText = "";
+                this.playerGuesses = {};
+                
+                this.selectedCipherChar = null;
+                this.hoveredCipherChar = null;
+
+                this.initDOM();
+                this.bindEvents();
+                this.loadPreset(0);
+            }
+
+            initDOM() {
+                this.cipherContainer = document.getElementById('cipher-container');
+                this.virtualKeyboard = document.getElementById('virtual-keyboard');
+                this.completionRateEl = document.getElementById('completion-rate');
+                this.progressBarEl = document.getElementById('progress-bar');
+                this.textSelector = document.getElementById('text-selector');
+                
+                this.freqModal = document.getElementById('freq-modal');
+                this.winModal = document.getElementById('win-modal');
+                this.dialogModal = document.getElementById('dialog-modal');
+                this.confirmModal = document.getElementById('confirm-modal');
+
+                // 仮想キーボード構築 (A-Z)
+                this.virtualKeyboard.innerHTML = '';
+                for (let i = 65; i <= 90; i++) {
+                    const char = String.fromCharCode(i);
+                    const btn = document.createElement('button');
+                    btn.className = 'w-7 h-8 md:w-9 md:h-9 bg-stone-800 hover:bg-amber-600 hover:text-stone-950 text-amber-100 font-bold font-mono rounded border border-stone-700 transition flex items-center justify-center text-xs md:text-sm shadow';
+                    btn.innerText = char;
+                    btn.dataset.char = char;
+                    btn.addEventListener('click', () => this.handleInputCharacter(char));
+                    this.virtualKeyboard.appendChild(btn);
+                }
+
+                const delBtn = document.createElement('button');
+                delBtn.className = 'px-2.5 h-8 md:h-9 bg-rose-950/80 hover:bg-rose-900 border border-rose-800 text-rose-200 font-bold rounded transition text-xs flex items-center justify-center';
+                delBtn.innerText = '消去';
+                delBtn.addEventListener('click', () => this.handleInputCharacter(''));
+                this.virtualKeyboard.appendChild(delBtn);
+
+                lucide.createIcons();
+            }
+
+            showDialog(title, message) {
+                document.getElementById('dialog-title').innerText = title;
+                document.getElementById('dialog-message').innerText = message;
+                this.dialogModal.classList.remove('hidden');
+            }
+
+            // 確実な1対1の置換暗号キー生成（完全順列 Fisher-Yates アルゴリズム）
+            generateCipherKey() {
+                const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+                let shuffled;
+                let hasSelfMatch;
+
+                // 自分自身に変換される文字（A->Aなど）が存在しない完全な置換キーを生成
+                do {
+                    shuffled = [...alphabet];
+                    for (let i = shuffled.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                    }
+                    hasSelfMatch = alphabet.some((char, idx) => char === shuffled[idx]);
+                } while (hasSelfMatch);
+                
+                this.cipherKey = {};
+                this.reverseKey = {};
+                
+                alphabet.forEach((char, index) => {
+                    this.cipherKey[char] = shuffled[index];
+                    this.reverseKey[shuffled[index]] = char;
+                });
+            }
+
+            loadPreset(index) {
+                this.currentTextIndex = index;
+                this.originalText = PRESET_TEXTS[index].text.toUpperCase();
+                
+                this.generateCipherKey();
+
+                this.cipherText = this.originalText.split('').map(ch => {
+                    if (/[A-Z]/.test(ch)) {
+                        return this.cipherKey[ch];
+                    }
+                    return ch;
+                }).join('');
+
+                this.resetGuessState();
+            }
+
+            resetGuessState() {
+                this.playerGuesses = {};
+                this.selectedCipherChar = null;
+                this.hoveredCipherChar = null;
+                this.renderCipher();
+                this.updateProgress();
+            }
+
+            renderCipher() {
+                this.cipherContainer.innerHTML = '';
+                const words = this.cipherText.split(' ');
+
+                words.forEach((word) => {
+                    const wordDiv = document.createElement('div');
+                    wordDiv.className = 'flex flex-wrap gap-1 mb-2 items-end';
+
+                    const chars = word.split('');
+                    chars.forEach((cipherChar, charIdx) => {
+                        const isLastInWord = (charIdx === chars.length - 1);
+                        
+                        const card = document.createElement('div');
+                        card.className = `dancing-card group flex flex-col items-center bg-stone-900/90 border border-stone-800 rounded-lg p-1.5 w-12 md:w-14 cursor-pointer select-none`;
+                        card.dataset.cipher = cipherChar;
+
+                        if (this.hoveredCipherChar === cipherChar) {
+                            card.classList.add('highlighted');
+                        }
+                        if (this.selectedCipherChar === cipherChar) {
+                            card.classList.add('selected');
+                        }
+
+                        const svgContainer = document.createElement('div');
+                        svgContainer.className = 'w-full h-14 md:h-16 flex items-center justify-center text-amber-200 group-hover:text-amber-400 transition-colors';
+                        
+                        let strokeColor = "currentColor";
+                        if (this.hoveredCipherChar === cipherChar) strokeColor = "#f59e0b";
+                        if (this.selectedCipherChar === cipherChar) strokeColor = "#60a5fa";
+
+                        svgContainer.innerHTML = generateDancingManSVG(cipherChar, isLastInWord, strokeColor);
+
+                        const inputBox = document.createElement('div');
+                        const guessedVal = this.playerGuesses[cipherChar] || '';
+                        
+                        inputBox.className = `w-full h-7 mt-1 border rounded flex items-center justify-center font-mono font-bold text-sm md:text-base transition-colors ${
+                            guessedVal 
+                                ? 'bg-amber-950/40 border-amber-700/60 text-amber-300' 
+                                : 'bg-stone-950 border-stone-800 text-stone-500'
+                        }`;
+                        inputBox.innerText = guessedVal;
+
+                        card.appendChild(svgContainer);
+                        card.appendChild(inputBox);
+
+                        card.addEventListener('mouseenter', () => {
+                            this.hoveredCipherChar = cipherChar;
+                            this.updateHighlights();
+                        });
+
+                        card.addEventListener('mouseleave', () => {
+                            this.hoveredCipherChar = null;
+                            this.updateHighlights();
+                        });
+
+                        card.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            this.selectedCipherChar = cipherChar;
+                            this.updateHighlights();
+                        });
+
+                        wordDiv.appendChild(card);
+                    });
+
+                    this.cipherContainer.appendChild(wordDiv);
+                });
+            }
+
+            updateHighlights() {
+                const cards = this.cipherContainer.querySelectorAll('.dancing-card');
+                cards.forEach(card => {
+                    const c = card.dataset.cipher;
+                    
+                    if (this.hoveredCipherChar && c === this.hoveredCipherChar) {
+                        card.classList.add('highlighted');
+                    } else {
+                        card.classList.remove('highlighted');
+                    }
+
+                    if (this.selectedCipherChar && c === this.selectedCipherChar) {
+                        card.classList.add('selected');
+                    } else {
+                        card.classList.remove('selected');
+                    }
+                });
+
+                // キーボード状態の可視化判定
+                const currentGuess = this.selectedCipherChar ? this.playerGuesses[this.selectedCipherChar] : null;
+                const usedChars = new Set(Object.values(this.playerGuesses));
+
+                Array.from(this.virtualKeyboard.children).forEach(btn => {
+                    const char = btn.dataset.char;
+                    if (char) {
+                        if (char === currentGuess) {
+                            // 1. 現在選択中の人形に設定されている文字 (最優先ハイライト)
+                            btn.className = 'w-7 h-8 md:w-9 md:h-9 bg-amber-500 text-stone-950 font-bold font-mono rounded border border-amber-400 transition flex items-center justify-center text-xs md:text-sm shadow ring-2 ring-amber-400/50';
+                        } else if (usedChars.has(char)) {
+                            // 2. すでに他の人形に割り当てられている文字 (使用済み)
+                            btn.className = 'w-7 h-8 md:w-9 md:h-9 bg-stone-950 text-stone-600 font-bold font-mono rounded border border-stone-850 hover:bg-amber-900/40 hover:text-amber-300 transition flex items-center justify-center text-xs md:text-sm opacity-50 line-through decoration-amber-600/70';
+                        } else {
+                            // 3. まだどの人形にも使われていない文字 (未使用)
+                            btn.className = 'w-7 h-8 md:w-9 md:h-9 bg-stone-800 hover:bg-amber-600 hover:text-stone-950 text-amber-100 font-bold font-mono rounded border border-stone-700 transition flex items-center justify-center text-xs md:text-sm shadow';
+                        }
+                    }
+                });
+            }
+
+            handleInputCharacter(char) {
+                if (!this.selectedCipherChar) return;
+
+                if (char === '') {
+                    delete this.playerGuesses[this.selectedCipherChar];
+                } else {
+                    this.playerGuesses[this.selectedCipherChar] = char.toUpperCase();
+                }
+
+                this.renderCipher();
+                this.updateProgress();
+            }
+
+            updateProgress() {
+                const totalLetters = this.cipherText.replace(/[^A-Z]/g, '').length;
+                let filledCount = 0;
+
+                for (let i = 0; i < this.cipherText.length; i++) {
+                    const ch = this.cipherText[i];
+                    if (/[A-Z]/.test(ch)) {
+                        if (this.playerGuesses[ch]) {
+                            filledCount++;
+                        }
+                    }
+                }
+
+                const percent = Math.round((filledCount / totalLetters) * 100);
+                this.completionRateEl.innerText = `${percent}%`;
+                this.progressBarEl.style.width = `${percent}%`;
+
+                if (percent === 100) {
+                    this.checkVictory(false);
+                }
+            }
+
+            checkVictory(showFailModal = true) {
+                let isCorrect = true;
+
+                for (let i = 0; i < this.cipherText.length; i++) {
+                    const cipherChar = this.cipherText[i];
+                    if (/[A-Z]/.test(cipherChar)) {
+                        const guess = this.playerGuesses[cipherChar];
+                        const correctPlain = this.reverseKey[cipherChar];
+
+                        if (guess !== correctPlain) {
+                            isCorrect = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (isCorrect) {
+                    document.getElementById('decoded-final-text').innerText = `"${this.originalText}"`;
+                    this.winModal.classList.remove('hidden');
+                } else if (showFailModal) {
+                    this.showDialog('検証結果', 'まだ解読に誤りがあるか、未入力の場所があります。人形のポーズや英単語の文脈を再確認してみましょう！');
+                }
+            }
+
+            giveHint() {
+                const unrevealedCipherChars = [];
+                for (let charCode = 65; charCode <= 90; charCode++) {
+                    const c = String.fromCharCode(charCode);
+                    if (this.cipherText.includes(c)) {
+                        const correctPlain = this.reverseKey[c];
+                        if (this.playerGuesses[c] !== correctPlain) {
+                            unrevealedCipherChars.push(c);
+                        }
+                    }
+                }
+
+                if (unrevealedCipherChars.length === 0) {
+                    this.showDialog('ヒント', 'すべての文字がすでに正しく解読されています！');
+                    return;
+                }
+
+                const targetCipher = unrevealedCipherChars[Math.floor(Math.random() * unrevealedCipherChars.length)];
+                const correctPlain = this.reverseKey[targetCipher];
+
+                this.playerGuesses[targetCipher] = correctPlain;
+                this.selectedCipherChar = targetCipher;
+
+                this.renderCipher();
+                this.updateProgress();
+            }
+
+            showFrequencyAnalysis() {
+                const freqMap = {};
+                let totalCount = 0;
+
+                for (let i = 0; i < this.cipherText.length; i++) {
+                    const c = this.cipherText[i];
+                    if (/[A-Z]/.test(c)) {
+                        freqMap[c] = (freqMap[c] || 0) + 1;
+                        totalCount++;
+                    }
+                }
+
+                const sorted = Object.entries(freqMap).sort((a, b) => b[1] - a[1]);
+
+                const chartContainer = document.getElementById('freq-chart');
+                chartContainer.innerHTML = '';
+
+                const maxCount = sorted.length > 0 ? sorted[0][1] : 1;
+
+                sorted.forEach(([cipherChar, count]) => {
+                    const pct = Math.round((count / totalCount) * 100);
+                    const barWidth = Math.max(8, Math.round((count / maxCount) * 100));
+
+                    const row = document.createElement('div');
+                    row.className = 'flex items-center gap-3 text-xs';
+                    row.innerHTML = `
+                        <div class="w-8 h-8 flex-shrink-0 border border-stone-700 bg-stone-950 rounded p-0.5 text-amber-400">
+                            ${generateDancingManSVG(cipherChar, false, "#f59e0b")}
+                        </div>
+                        <div class="w-20 font-mono text-stone-300">
+                            出現: <span class="text-amber-400 font-bold">${count}回</span> (${pct}%)
+                        </div>
+                        <div class="flex-grow bg-stone-950 h-3 rounded-full overflow-hidden border border-stone-800">
+                            <div class="bg-amber-600 h-full rounded-full" style="width: ${barWidth}%"></div>
+                        </div>
+                        <div class="w-16 text-right font-mono text-stone-400">
+                            推測: <span class="text-amber-200 font-bold">${this.playerGuesses[cipherChar] || '?'}</span>
+                        </div>
+                    `;
+                    chartContainer.appendChild(row);
+                });
+
+                this.freqModal.classList.remove('hidden');
+            }
+
+            bindEvents() {
+                // キーボード直接入力
+                window.addEventListener('keydown', (e) => {
+                    if (!this.freqModal.classList.contains('hidden')) return;
+                    if (!this.winModal.classList.contains('hidden')) return;
+                    if (!this.dialogModal.classList.contains('hidden')) return;
+                    if (!this.confirmModal.classList.contains('hidden')) return;
+
+                    const key = e.key.toUpperCase();
+                    if (/^[A-Z]$/.test(key)) {
+                        this.handleInputCharacter(key);
+                    } else if (e.key === 'Backspace' || e.key === 'Delete') {
+                        this.handleInputCharacter('');
+                    } else if (e.key === 'Escape') {
+                        this.selectedCipherChar = null;
+                        this.updateHighlights();
+                    }
+                });
+
+                // 外側クリック選択解除
+                document.addEventListener('click', (e) => {
+                    if (!e.target.closest('#cipher-container') && !e.target.closest('#virtual-keyboard')) {
+                        this.selectedCipherChar = null;
+                        this.updateHighlights();
+                    }
+                });
+
+                // UIコントロール
+                this.textSelector.addEventListener('change', (e) => {
+                    this.loadPreset(parseInt(e.target.value));
+                });
+
+                // リセットボタン
+                document.getElementById('btn-reset').addEventListener('click', () => {
+                    this.confirmModal.classList.remove('hidden');
+                });
+
+                document.getElementById('btn-confirm-ok').addEventListener('click', () => {
+                    this.resetGuessState();
+                    this.confirmModal.classList.add('hidden');
+                });
+
+                document.getElementById('btn-confirm-cancel').addEventListener('click', () => {
+                    this.confirmModal.classList.add('hidden');
+                });
+
+                document.getElementById('btn-hint').addEventListener('click', () => {
+                    this.giveHint();
+                });
+
+                document.getElementById('btn-check').addEventListener('click', () => {
+                    this.checkVictory(true);
+                });
+
+                document.getElementById('btn-freq').addEventListener('click', () => {
+                    this.showFrequencyAnalysis();
+                });
+
+                // ダイアログ閉じる処理
+                document.getElementById('btn-dialog-close').addEventListener('click', () => {
+                    this.dialogModal.classList.add('hidden');
+                });
+
+                document.querySelectorAll('.btn-close-modal').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        this.freqModal.classList.add('hidden');
+                    });
+                });
+
+                document.getElementById('btn-win-close').addEventListener('click', () => {
+                    this.winModal.classList.add('hidden');
+                    const nextIndex = (this.currentTextIndex + 1) % PRESET_TEXTS.length;
+                    this.textSelector.value = nextIndex;
+                    this.loadPreset(nextIndex);
+                });
+            }
+        }
+
+        // アプリケーション起動
+        window.addEventListener('DOMContentLoaded', () => {
+            new CipherGame();
+        });
+    </script>
+</body>
+</html>
