@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ドット絵英単語RPG - 4択クイズダンジョン</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Press Start 2P & DotGothic16 -->
+    <link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        /* レトロゲーム風スタイル */
+        body {
+            font-family: 'DotGothic16', sans-serif;
+            background-color: #0d0e15;
+            color: #f1f5f9;
+            image-rendering: pixelated;
+        }
+
+        .font-pixel {
+            font-family: 'Press Start 2P', cursive;
+        }
+
+        /* レトロゲーム風枠線 */
+        .pixel-box {
+            border: 4px solid #334155;
+            box-shadow: 
+                inset -4px -4px 0px 0px #0f172a,
+                inset 4px 4px 0px 0px #475569,
+                0px 6px 0px 0px rgba(0, 0, 0, 0.5);
+            background-color: #1e293b;
+        }
+
+        .pixel-box-amber {
+            border: 4px solid #b45309;
+            box-shadow: 
+                inset -4px -4px 0px 0px #451a03,
+                inset 4px 4px 0px 0px #f59e0b,
+                0px 6px 0px 0px rgba(0, 0, 0, 0.5);
+            background-color: #78350f;
+        }
+
+        .pixel-btn {
+            position: relative;
+            border: 3px solid #000;
+            box-shadow: inset -3px -3px 0px 0px rgba(0,0,0,0.4), inset 3px 3px 0px 0px rgba(255,255,255,0.3);
+            transition: transform 0.05s, box-shadow 0.05s;
+        }
+        .pixel-btn:active {
+            transform: translateY(3px);
+            box-shadow: inset 3px 3px 0px 0px rgba(0,0,0,0.6);
+        }
+
+        /* アニメーション用クラス */
+        @keyframes attackPlayer {
+            0% { transform: translateX(0); }
+            50% { transform: translateX(40px) scale(1.1); }
+            100% { transform: translateX(0); }
+        }
+        @keyframes attackEnemy {
+            0% { transform: translateX(0); }
+            50% { transform: translateX(-40px) scale(1.1); }
+            100% { transform: translateX(0); }
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-8px); }
+            40%, 80% { transform: translateX(8px); }
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-6px); }
+        }
+
+        .anim-attack-player { animation: attackPlayer 0.3s ease-in-out; }
+        .anim-attack-enemy { animation: attackEnemy 0.3s ease-in-out; }
+        .anim-damage { animation: shake 0.4s ease-in-out; }
+        .anim-float { animation: float 2s infinite ease-in-out; }
+
+        /* スクロールバー */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between select-none">
+
+    <!-- ヘッダー -->
+    <header class="bg-slate-900 border-b-4 border-slate-700 px-4 py-3 sticky top-0 z-40">
+        <div class="max-w-4xl mx-auto flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-amber-500 rounded border-2 border-black flex items-center justify-center font-pixel text-slate-950 font-bold text-lg shadow">
+                    ⚔️
+                </div>
+                <div>
+                    <h1 class="text-lg md:text-xl font-bold text-amber-400 tracking-wider">ピクセル単語ダンジョン</h1>
+                    <p class="text-xs text-slate-400">楽しく学べる！2Dドット絵 4択英単語クイズRPG</p>
+                </div>
+            </div>
+
+            <!-- ステータス表示 -->
+            <div class="flex items-center gap-3 text-sm">
+                <div class="bg-slate-950 border-2 border-amber-500/60 px-3 py-1 rounded flex items-center gap-2">
+                    <span class="text-amber-400 font-bold">💰 GOLD:</span>
+                    <span id="player-gold" class="font-pixel text-amber-300 text-sm md:text-base">0</span>
+                </div>
+                <div id="save-status" class="hidden sm:flex items-center gap-1 text-xs text-emerald-400 bg-emerald-950/60 border border-emerald-700 px-2.5 py-1 rounded">
+                    <i data-lucide="cloud" class="w-3.5 h-3.5"></i>
+                    <span>同期中</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- メインフレーム -->
+    <main class="max-w-4xl mx-auto w-full p-3 md:p-6 flex-1 flex flex-col justify-center">
+
+        <!-- ==================== 拠点（タウン）画面 ==================== -->
+        <div id="screen-town" class="space-y-6">
+            <!-- プレイヤー情報 & キャラクタープレビュー -->
+            <div class="pixel-box p-4 md:p-6 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-6">
+                <div class="flex items-center gap-5">
+                    <!-- 装備反映ドット絵キャラ -->
+                    <div class="relative w-24 h-24 bg-slate-950 border-4 border-slate-700 rounded-lg flex items-center justify-center overflow-hidden">
+                        <canvas id="town-char-canvas" width="64" height="64" class="w-20 h-20 anim-float"></canvas>
+                    </div>
+                    <div>
+                        <div class="text-xs text-amber-400 font-bold mb-1" id="town-char-title">冒険者</div>
+                        <h2 class="text-xl md:text-2xl font-bold text-white mb-2" id="town-char-name">見習い騎士</h2>
+                        <div class="flex flex-wrap gap-2 text-xs text-slate-300">
+                            <span class="bg-slate-800 border border-slate-600 px-2 py-0.5 rounded">HP: <b id="stat-hp" class="text-emerald-400">100</b></span>
+                            <span class="bg-slate-800 border border-slate-600 px-2 py-0.5 rounded">倍率: <b id="stat-mult" class="text-amber-300">1.0x</b></span>
+                            <span class="bg-slate-800 border border-slate-600 px-2 py-0.5 rounded">最高連勝: <b id="stat-streak" class="text-cyan-300">0</b></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- モード選択ボタン（難易度4段階：EASY -> EXPERT） -->
+                <div class="flex flex-col w-full sm:w-auto gap-2">
+                    <button onclick="game.startBattle('elem')" class="pixel-btn bg-amber-600 hover:bg-amber-500 text-white font-bold py-2.5 px-5 rounded text-center text-xs md:text-sm flex items-center justify-between gap-3">
+                        <span class="font-pixel text-amber-200">EASY</span>
+                        <span>🎒 (小学生レベル)</span>
+                    </button>
+                    <button onclick="game.startBattle('grade1')" class="pixel-btn bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-5 rounded text-center text-xs md:text-sm flex items-center justify-between gap-3">
+                        <span class="font-pixel text-emerald-200">NORMAL</span>
+                        <span>🌱 (中学1年生レベル)</span>
+                    </button>
+                    <button onclick="game.startBattle('grade2')" class="pixel-btn bg-sky-600 hover:bg-sky-500 text-white font-bold py-2.5 px-5 rounded text-center text-xs md:text-sm flex items-center justify-between gap-3">
+                        <span class="font-pixel text-sky-200">HARD</span>
+                        <span>⚔️ (中学2年生レベル)</span>
+                    </button>
+                    <button onclick="game.startBattle('gradeAll')" class="pixel-btn bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 px-5 rounded text-center text-xs md:text-sm flex items-center justify-between gap-3">
+                        <span class="font-pixel text-purple-200">EXPERT</span>
+                        <span>👑 (中学全般レベル)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ナビゲーションメニュー (ショップ/ギルド/装備) -->
+            <div class="grid grid-cols-3 gap-3">
+                <button onclick="game.showTab('guild')" id="tab-btn-guild" class="pixel-btn bg-amber-700 text-white font-bold py-3 rounded text-center text-xs md:text-sm">
+                    🏛️ キャラギルド
+                </button>
+                <button onclick="game.showTab('shop')" id="tab-btn-shop" class="pixel-btn bg-slate-800 text-slate-300 hover:bg-slate-700 font-bold py-3 rounded text-center text-xs md:text-sm">
+                    🗡️ 鍛冶屋・ショップ
+                </button>
+                <button onclick="game.showTab('equip')" id="tab-btn-equip" class="pixel-btn bg-slate-800 text-slate-300 hover:bg-slate-700 font-bold py-3 rounded text-center text-xs md:text-sm">
+                    🎒 装備変更
+                </button>
+            </div>
+
+            <!-- タブコンテンツエリア -->
+            <div class="pixel-box p-4 md:p-6 rounded-lg min-h-[320px]">
+
+                <!-- 1. キャラクターギルド -->
+                <div id="tab-guild" class="space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-700 pb-2">
+                        <h3 class="text-base font-bold text-amber-300">キャラの解放 & 切り替え</h3>
+                        <span class="text-xs text-slate-400">新しい姿でダンジョンへ！</span>
+                    </div>
+                    <div id="char-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                        <!-- JSで動的生成 -->
+                    </div>
+                </div>
+
+                <!-- 2. ショップ -->
+                <div id="tab-shop" class="hidden space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-700 pb-2">
+                        <h3 class="text-base font-bold text-amber-300">武器・防具・アクセサリー購入</h3>
+                        <span class="text-xs text-slate-400">獲得ポイント倍率や最大HPを強化！</span>
+                    </div>
+                    <div id="shop-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <!-- JSで動的生成 -->
+                    </div>
+                </div>
+
+                <!-- 3. 装備変更 -->
+                <div id="tab-equip" class="hidden space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-700 pb-2">
+                        <h3 class="text-base font-bold text-amber-300">現在の装備スロット</h3>
+                        <span class="text-xs text-slate-400">所有アイテムを付け替えられます</span>
+                    </div>
+                    <div id="equip-slots" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <!-- JSで動的生成 -->
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ==================== バトル（クイズ）画面 ==================== -->
+        <div id="screen-battle" class="hidden space-y-4">
+            
+            <!-- 2D ドット絵キャンバスステージ -->
+            <div class="pixel-box relative rounded-lg overflow-hidden bg-slate-950 p-2 md:p-4 border-4 border-slate-700">
+                
+                <!-- ダンジョンヘッダー情報 -->
+                <div class="flex items-center justify-between text-xs text-slate-300 mb-2 px-2">
+                    <div class="flex items-center gap-2">
+                        <span id="battle-stage-name" class="font-bold text-amber-400">EASY (小学生レベル)</span>
+                        <span class="bg-slate-800 px-2 py-0.5 rounded font-mono">WAVE <span id="wave-count" class="text-amber-300">1</span>/10</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span>スコア:</span>
+                        <span id="battle-score" class="font-pixel text-amber-300">0</span>
+                    </div>
+                </div>
+
+                <!-- 2D Canvas アニメーション表示 -->
+                <div class="relative w-full h-48 md:h-64 bg-slate-900 rounded border-2 border-slate-800 flex items-center justify-between px-4 sm:px-12 overflow-hidden">
+                    
+                    <!-- 背景ドットグラデーション風演出 -->
+                    <div class="absolute inset-0 opacity-20 pointer-events-none bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:16px_16px]"></div>
+
+                    <!-- プレイヤーキャラ & HPバー -->
+                    <div id="player-unit" class="relative flex flex-col items-center z-10">
+                        <div class="w-20 md:w-24 mb-1">
+                            <div class="flex justify-between text-[10px] text-emerald-400 font-bold mb-0.5">
+                                <span>PLAYER</span>
+                                <span id="player-hp-text">100/100</span>
+                            </div>
+                            <div class="w-full bg-slate-950 h-2.5 rounded border border-slate-700 overflow-hidden">
+                                <div id="player-hp-bar" class="bg-emerald-500 h-full w-full transition-all duration-300"></div>
+                            </div>
+                        </div>
+                        <canvas id="canvas-player" width="64" height="64" class="w-20 h-20 md:w-24 md:h-24"></canvas>
+                    </div>
+
+                    <!-- VS アイコン -->
+                    <div class="font-pixel text-amber-500/40 text-2xl md:text-4xl animate-pulse">
+                        VS
+                    </div>
+
+                    <!-- エネミーキャラ & HPバー -->
+                    <div id="enemy-unit" class="relative flex flex-col items-center z-10">
+                        <div class="w-20 md:w-24 mb-1">
+                            <div class="flex justify-between text-[10px] text-rose-400 font-bold mb-0.5">
+                                <span id="enemy-name">スライム</span>
+                                <span id="enemy-hp-text">50/50</span>
+                            </div>
+                            <div class="w-full bg-slate-950 h-2.5 rounded border border-slate-700 overflow-hidden">
+                                <div id="enemy-hp-bar" class="bg-rose-500 h-full w-full transition-all duration-300"></div>
+                            </div>
+                        </div>
+                        <canvas id="canvas-enemy" width="64" height="64" class="w-20 h-20 md:w-24 md:h-24"></canvas>
+                    </div>
+
+                    <!-- エフェクトオーバーレイ -->
+                    <div id="battle-effect" class="absolute inset-0 pointer-events-none flex items-center justify-center font-bold text-2xl z-20 opacity-0 transition-opacity"></div>
+                </div>
+
+                <!-- 制限時間タイマーバー -->
+                <div class="mt-2 w-full bg-slate-950 h-2 rounded overflow-hidden border border-slate-800">
+                    <div id="timer-bar" class="bg-sky-400 h-full w-full transition-all duration-100"></div>
+                </div>
+            </div>
+
+            <!-- クイズエリア -->
+            <div class="pixel-box p-4 md:p-6 rounded-lg space-y-4">
+                
+                <!-- 出題英単語 -->
+                <div class="text-center bg-slate-950 py-4 px-2 rounded-lg border-2 border-slate-800">
+                    <div class="text-xs text-amber-400 font-bold mb-1">この英単語の意味は？</div>
+                    <div id="question-word" class="text-2xl md:text-4xl font-extrabold text-white tracking-wide font-mono">
+                        apple
+                    </div>
+                    <div id="question-phonetic" class="text-xs text-slate-400 mt-1">
+                        [名詞]
+                    </div>
+                </div>
+
+                <!-- 4択選択肢ボタン -->
+                <div id="options-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <!-- JSで選択肢ボタンを動的生成 -->
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ==================== リザルト画面 ==================== -->
+        <div id="screen-result" class="hidden space-y-6">
+            <div class="pixel-box p-6 md:p-8 rounded-lg text-center space-y-6">
+                
+                <div id="result-header-icon" class="inline-flex p-4 bg-amber-500/20 rounded-full border-2 border-amber-500 text-amber-400 text-4xl mb-2">
+                    🏆
+                </div>
+
+                <div class="space-y-1">
+                    <h2 id="result-title" class="text-2xl md:text-3xl font-black text-amber-400">ダンジョンクリア！</h2>
+                    <p id="result-subtitle" class="text-xs md:text-sm text-slate-300">すべてのモンスターを撃破した！</p>
+                </div>
+
+                <!-- スコア詳細テーブル -->
+                <div class="bg-slate-950 p-4 rounded-lg border-2 border-slate-800 max-w-md mx-auto text-left space-y-2 text-sm">
+                    <div class="flex justify-between text-slate-300">
+                        <span>正解数:</span>
+                        <span id="res-correct" class="font-mono text-white font-bold">10 / 10</span>
+                    </div>
+                    <div class="flex justify-between text-slate-300">
+                        <span>最大コンボ:</span>
+                        <span id="res-combo" class="font-mono text-cyan-300 font-bold">10</span>
+                    </div>
+                    <div class="flex justify-between text-slate-300">
+                        <span>基本獲得ゴールド:</span>
+                        <span id="res-base-gold" class="font-mono text-amber-300">+100 G</span>
+                    </div>
+                    <div class="flex justify-between text-slate-300">
+                        <span>装備・キャラ倍率ボーナス:</span>
+                        <span id="res-bonus-mult" class="font-mono text-emerald-400">x1.5</span>
+                    </div>
+                    <div class="border-t border-slate-800 pt-2 flex justify-between text-base font-bold text-amber-400">
+                        <span>合計獲得ゴールド:</span>
+                        <span id="res-total-gold" class="font-pixel text-amber-300 text-lg">+150 G</span>
+                    </div>
+                </div>
+
+                <!-- 操作ボタン -->
+                <div class="flex justify-center gap-4 pt-2">
+                    <button onclick="game.showTown()" class="pixel-btn bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 px-6 rounded text-sm">
+                        拠点に戻る
+                    </button>
+                    <button onclick="game.retryBattle()" class="pixel-btn bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold py-3 px-6 rounded text-sm">
+                        もう一度挑戦
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
+    </main>
+
+    <!-- フッター -->
+    <footer class="bg-slate-900 border-t-2 border-slate-800 py-3 text-center text-xs text-slate-500">
+        <p>ドット絵英単語RPG • Pixel Word Dungeon</p>
+    </footer>
+
+    <!-- Firebase / Firestore モジュール統合 -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'dot-english-rpg';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "demo-api-key",
+            authDomain: "demo-app.firebaseapp.com",
+            projectId: "demo-app",
+            storageBucket: "demo-app.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:abcdef"
+        };
+
+        let db = null;
+        let auth = null;
+        let currentUser = null;
+
+        try {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+
+            // 認証初期化
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await signInWithCustomToken(auth, __initial_auth_token);
+            } else {
+                await signInAnonymously(auth);
+            }
+
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    currentUser = user;
+                    window.cloudStorageReady = true;
+                    // 初回ロード
+                    loadGameDataFromCloud();
+                }
+            });
+        } catch (e) {
+            console.warn("Cloud save disabled. Fallback to session memory.", e);
+        }
+
+        // 保存関数
+        window.saveGameDataToCloud = async function(data) {
+            if (!currentUser || !db) return;
+            try {
+                const userDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'gameData', 'saveState');
+                await setDoc(userDocRef, {
+                    ...data,
+                    updatedAt: new Date().toISOString()
+                }, { merge: true });
+                
+                const statusEl = document.getElementById('save-status');
+                if (statusEl) {
+                    statusEl.classList.remove('hidden');
+                    statusEl.innerHTML = `<i data-lucide="check" class="w-3.5 h-3.5"></i><span>保存完了</span>`;
+                    lucide.createIcons();
+                    setTimeout(() => {
+                        statusEl.innerHTML = `<i data-lucide="cloud" class="w-3.5 h-3.5"></i><span>同期中</span>`;
+                        lucide.createIcons();
+                    }, 2000);
+                }
+            } catch (err) {
+                console.error("Save failed:", err);
+            }
+        };
+
+        // ロード関数
+        async function loadGameDataFromCloud() {
+            if (!currentUser || !db) return;
+            try {
+                const userDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'gameData', 'saveState');
+                const docSnap = await getDoc(userDocRef);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (window.game) {
+                        window.game.loadSaveData(data);
+                    }
+                }
+            } catch (err) {
+                console.error("Load failed:", err);
+            }
+        }
+    </script>
+
+    <!-- ゲームロジック & ドット絵描画エンジン -->
+    <script>
+        // 英単語データベース (4つの難易度レベル)
+        const WORD_DATABASE = {
+            // 🎒 EASY (小学生レベル)
+            elem: [
+                { word: "apple", meaning: "りんご", pos: "名詞" },
+                { word: "dog", meaning: "犬", pos: "名詞" },
+                { word: "cat", meaning: "猫", pos: "名詞" },
+                { word: "book", meaning: "本", pos: "名詞" },
+                { word: "pen", meaning: "ペン", pos: "名詞" },
+                { word: "red", meaning: "赤・赤い", pos: "形容詞・名詞" },
+                { word: "blue", meaning: "青・青い", pos: "形容詞・名詞" },
+                { word: "yellow", meaning: "黄色・黄色の", pos: "形容詞・名詞" },
+                { word: "run", meaning: "走る", pos: "動詞" },
+                { word: "swim", meaning: "泳ぐ", pos: "動詞" },
+                { word: "happy", meaning: "幸せな・うれしい", pos: "形容詞" },
+                { word: "sun", meaning: "太陽・日", pos: "名詞" },
+                { word: "water", meaning: "水", pos: "名詞" },
+                { word: "milk", meaning: "牛乳・ミルク", pos: "名詞" },
+                { word: "bird", meaning: "鳥", pos: "名詞" },
+                { word: "fish", meaning: "魚", pos: "名詞" },
+                { word: "desk", meaning: "つくえ", pos: "名詞" },
+                { word: "chair", meaning: "いす", pos: "名詞" },
+                { word: "music", meaning: "音楽", pos: "名詞" },
+                { word: "box", meaning: "箱・ボックス", pos: "名詞" }
+            ],
+
+            // 🌱 NORMAL (中学1年生レベル)
+            grade1: [
+                { word: "like", meaning: "〜が好きである", pos: "動詞" },
+                { word: "play", meaning: "（スポーツや楽器を）する・遊ぶ", pos: "動詞" },
+                { word: "student", meaning: "生徒・学生", pos: "名詞" },
+                { word: "teacher", meaning: "先生・教師", pos: "名詞" },
+                { word: "friend", meaning: "友達", pos: "名詞" },
+                { word: "family", meaning: "家族", pos: "名詞" },
+                { word: "school", meaning: "学校", pos: "名詞" },
+                { word: "study", meaning: "勉強する", pos: "動詞" },
+                { word: "speak", meaning: "（言語を）話す", pos: "動詞" },
+                { word: "everyday", meaning: "毎日・日常の", pos: "副詞・形容詞" },
+                { word: "always", meaning: "いつも・常に", pos: "副詞" },
+                { word: "country", meaning: "国・田舎", pos: "名詞" },
+                { word: "famous", meaning: "有名な", pos: "形容詞" },
+                { word: "beautiful", meaning: "美しい", pos: "形容詞" },
+                { word: "hungry", meaning: "お腹が空いた", pos: "形容詞" },
+                { word: "winter", meaning: "冬", pos: "名詞" },
+                { word: "breakfast", meaning: "朝食", pos: "名詞" },
+                { word: "listen", meaning: "（耳を傾けて）聴く", pos: "動詞" },
+                { word: "welcome", meaning: "歓迎する・ようこそ", pos: "動詞・間投詞" },
+                { word: "practice", meaning: "練習する", pos: "動詞" }
+            ],
+
+            // ⚔️ HARD (中学2年生レベル)
+            grade2: [
+                { word: "difficult", meaning: "難しい", pos: "形容詞" },
+                { word: "remember", meaning: "思い出す・覚えている", pos: "動詞" },
+                { word: "future", meaning: "未来・将来", pos: "名詞" },
+                { word: "science", meaning: "理科・科学", pos: "名詞" },
+                { word: "important", meaning: "重要な・大切な", pos: "形容詞" },
+                { word: "together", meaning: "一緒に", pos: "副詞" },
+                { word: "experience", meaning: "経験", pos: "名詞" },
+                { word: "hospital", meaning: "病院", pos: "名詞" },
+                { word: "travel", meaning: "旅行する", pos: "動詞" },
+                { word: "culture", meaning: "文化", pos: "名詞" },
+                { word: "weather", meaning: "天気", pos: "名詞" },
+                { word: "decide", meaning: "決める・決意する", pos: "動詞" },
+                { word: "borrow", meaning: "借りる", pos: "動詞" },
+                { word: "explain", meaning: "説明する", pos: "動詞" },
+                { word: "accident", meaning: "事故・事件", pos: "名詞" },
+                { word: "surprised", meaning: "驚いた", pos: "形容詞" },
+                { word: "foreign", meaning: "外国の", pos: "形容詞" },
+                { word: "continue", meaning: "続ける・続く", pos: "動詞" },
+                { word: "protect", meaning: "保護する・守る", pos: "動詞" },
+                { word: "different", meaning: "異なる・違う", pos: "形容詞" }
+            ],
+
+            // 👑 EXPERT (中学全般レベル)
+            gradeAll: [
+                { word: "environment", meaning: "環境", pos: "名詞" },
+                { word: "convenient", meaning: "便利な", pos: "形容詞" },
+                { word: "influence", meaning: "影響を与える", pos: "動詞" },
+                { word: "government", meaning: "政府", pos: "名詞" },
+                { word: "international", meaning: "国際的な", pos: "形容詞" },
+                { word: "necessary", meaning: "必要な", pos: "形容詞" },
+                { word: "opportunity", meaning: "機会・チャンス", pos: "名詞" },
+                { word: "recommend", meaning: "推薦する・勧める", pos: "動詞" },
+                { word: "traditional", meaning: "伝統的な", pos: "形容詞" },
+                { word: "volunteer", meaning: "ボランティア", pos: "名詞" },
+                { word: "communicate", meaning: "意思疎通する", pos: "動詞" },
+                { word: "population", meaning: "人口", pos: "名詞" },
+                { word: "technology", meaning: "科学技術", pos: "名詞" },
+                { word: "disaster", meaning: "災害", pos: "名詞" },
+                { word: "produce", meaning: "生産する・作り出す", pos: "動詞" },
+                { word: "relatives", meaning: "親戚", pos: "名詞" },
+                { word: "succeed", meaning: "成功する", pos: "動詞" },
+                { word: "improve", meaning: "改善する・向上させる", pos: "動詞" },
+                { word: "knowledge", meaning: "知識", pos: "名詞" },
+                { word: "valuable", meaning: "価値のある・貴重な", pos: "形容詞" }
+            ]
+        };
+
+        // キャラクター定義 (全8種類)
+        const CHARACTERS = [
+            { id: "knight", name: "見習い騎士", title: "正義の剣士", price: 0, hpBonus: 0, multBonus: 0.0, color: "#3b82f6", spriteType: "knight" },
+            { id: "wizard", name: "大魔導士", title: "英知の探求者", price: 150, hpBonus: 10, multBonus: 0.2, color: "#8b5cf6", spriteType: "wizard" },
+            { id: "ninja", name: "疾風の忍者", title: "影の暗殺者", price: 300, hpBonus: 15, multBonus: 0.3, color: "#10b981", spriteType: "ninja" },
+            { id: "cat_girl", name: "ネコ耳剣士", title: "すばやい冒険者", price: 500, hpBonus: 20, multBonus: 0.4, color: "#f43f5e", spriteType: "cat" },
+            { id: "archer", name: "精霊の射手", title: "森の護り人", price: 800, hpBonus: 25, multBonus: 0.5, color: "#84cc16", spriteType: "archer" },
+            { id: "paladin", name: "聖騎士", title: "不屈の盾", price: 1200, hpBonus: 50, multBonus: 0.6, color: "#eab308", spriteType: "paladin" },
+            { id: "dragon_knight", name: "竜騎士", title: "ドラゴンスレイヤー", price: 2000, hpBonus: 70, multBonus: 0.8, color: "#ef4444", spriteType: "dragon_k" },
+            { id: "demon_lord", name: "ドット魔王", title: "世界の覇王", price: 3500, hpBonus: 100, multBonus: 1.2, color: "#a855f7", spriteType: "demon" }
+        ];
+
+        // 装備品定義 (武器, 防具, アクセサリ)
+        const SHOP_ITEMS = [
+            // 武器
+            { id: "w_bronze", name: "銅の剣", type: "weapon", price: 50, bonusText: "倍率 +0.1x", mult: 0.1, icon: "⚔️" },
+            { id: "w_silver", name: "銀の細身剣", type: "weapon", price: 200, bonusText: "倍率 +0.25x", mult: 0.25, icon: "🗡️" },
+            { id: "w_staff", name: "賢者の杖", type: "weapon", price: 600, bonusText: "倍率 +0.5x", mult: 0.5, icon: "🪄" },
+            { id: "w_legend", name: "聖剣エクスカリバー", type: "weapon", price: 1500, bonusText: "倍率 +1.0x", mult: 1.0, icon: "🔱" },
+            // 防具
+            { id: "a_leather", name: "革のよろい", type: "armor", price: 50, bonusText: "HP +20", hp: 20, icon: "🛡️" },
+            { id: "a_iron", name: "鉄のプレートアーマー", type: "armor", price: 250, bonusText: "HP +50", hp: 50, icon: "🦾" },
+            { id: "a_robe", name: "大魔法使いのローブ", type: "armor", price: 700, bonusText: "HP +100", hp: 100, icon: "🥋" },
+            // アクセサリー
+            { id: "acc_ring", name: "幸運の指輪", type: "accessory", price: 100, bonusText: "倍率 +0.15x", mult: 0.15, icon: "💍" },
+            { id: "acc_amulet", name: "英知のアミュレット", type: "accessory", price: 400, bonusText: "HP+30, 倍率+0.2x", hp: 30, mult: 0.2, icon: "📿" },
+            { id: "acc_crown", name: "黄金の王冠", type: "accessory", price: 1200, bonusText: "HP+50, 倍率+0.5x", hp: 50, mult: 0.5, icon: "👑" }
+        ];
+
+        // ドット絵キャンバス描画ヘルパー
+        function drawPixelSprite(ctx, type, isEnemy = false, scale = 4) {
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            
+            const pSize = scale;
+            const offsetX = (ctx.canvas.width - 16 * pSize) / 2;
+            const offsetY = (ctx.canvas.height - 16 * pSize) / 2;
+
+            function fillP(x, y, color) {
+                ctx.fillStyle = color;
+                ctx.fillRect(offsetX + x * pSize, offsetY + y * pSize, pSize, pSize);
+            }
+
+            if (!isEnemy) {
+                let headColor = "#fde047";
+                let bodyColor = "#3b82f6";
+                let subColor = "#94a3b8";
+
+                if (type === "wizard") { bodyColor = "#8b5cf6"; headColor = "#c084fc"; }
+                else if (type === "ninja") { bodyColor = "#0f172a"; headColor = "#334155"; subColor = "#ef4444"; }
+                else if (type === "cat") { bodyColor = "#f43f5e"; headColor = "#fda4af"; }
+                else if (type === "paladin") { bodyColor = "#eab308"; subColor = "#fef08a"; }
+                else if (type === "demon") { bodyColor = "#581c87"; headColor = "#a855f7"; subColor = "#ef4444"; }
+
+                for (let x = 5; x <= 10; x++) for (let y = 3; y <= 7; y++) fillP(x, y, "#fca5a5");
+                fillP(6, 5, "#000"); fillP(9, 5, "#000");
+                for (let x = 4; x <= 11; x++) for (let y = 2; y <= 4; y++) fillP(x, y, headColor);
+                if (type === "cat") { fillP(4, 1, headColor); fillP(11, 1, headColor); }
+                for (let x = 4; x <= 11; x++) for (let y = 8; y <= 12; y++) fillP(x, y, bodyColor);
+                fillP(3, 9, subColor); fillP(3, 8, subColor); fillP(3, 7, "#e2e8f0"); fillP(3, 6, "#e2e8f0");
+                fillP(12, 9, "#fca5a5");
+                fillP(5, 13, "#1e293b"); fillP(6, 13, "#1e293b");
+                fillP(9, 13, "#1e293b"); fillP(10, 13, "#1e293b");
+                fillP(5, 14, "#1e293b"); fillP(10, 14, "#1e293b");
+            } else {
+                if (type === "slime") {
+                    const c = "#38bdf8";
+                    for (let x = 4; x <= 11; x++) for (let y = 8; y <= 13; y++) fillP(x, y, c);
+                    for (let x = 6; x <= 9; x++) fillP(x, 7, c);
+                    fillP(6, 9, "#fff"); fillP(9, 9, "#fff");
+                    fillP(6, 10, "#000"); fillP(9, 10, "#000");
+                } else if (type === "goblin") {
+                    const c = "#22c55e";
+                    for (let x = 5; x <= 10; x++) for (let y = 4; y <= 8; y++) fillP(x, y, c);
+                    fillP(4, 5, c); fillP(11, 5, c);
+                    fillP(6, 6, "#ef4444"); fillP(9, 6, "#ef4444");
+                    for (let x = 4; x <= 11; x++) for (let y = 9; y <= 13; y++) fillP(x, y, "#78350f");
+                } else if (type === "dragon") {
+                    const c = "#dc2626";
+                    for (let x = 3; x <= 12; x++) for (let y = 4; y <= 12; y++) fillP(x, y, c);
+                    fillP(2, 2, "#f59e0b"); fillP(13, 2, "#f59e0b");
+                    fillP(5, 6, "#fef08a"); fillP(10, 6, "#fef08a");
+                    fillP(5, 7, "#000"); fillP(10, 7, "#000");
+                    for (let x = 6; x <= 9; x++) fillP(x, 9, "#fef08a");
+                } else {
+                    const c = "#a855f7";
+                    for (let x = 4; x <= 11; x++) for (let y = 4; y <= 13; y++) fillP(x, y, c);
+                    fillP(3, 2, "#000"); fillP(12, 2, "#000");
+                    fillP(6, 6, "#facc15"); fillP(9, 6, "#facc15");
+                }
+            }
+        }
+
+        class PixelRPGGame {
+            constructor() {
+                this.gold = 0;
+                this.unlockedChars = ["knight"];
+                this.selectedCharId = "knight";
+                
+                this.inventory = [];
+                this.equipped = {
+                    weapon: null,
+                    armor: null,
+                    accessory: null
+                };
+
+                this.maxStreak = 0;
+
+                // バトル状態
+                this.currentStage = 'elem';
+                this.wave = 1;
+                this.maxWave = 10;
+                this.playerHp = 100;
+                this.playerMaxHp = 100;
+                this.enemyHp = 50;
+                this.enemyMaxHp = 50;
+                this.score = 0;
+                this.combo = 0;
+
+                this.currentQuestion = null;
+                this.timer = null;
+                this.timeLeft = 100;
+
+                this.initDOM();
+                this.updateUI();
+                this.renderTownCanvas();
+            }
+
+            initDOM() {
+                this.showTab('guild');
+            }
+
+            loadSaveData(data) {
+                if (!data) return;
+                if (data.gold !== undefined) this.gold = data.gold;
+                if (data.unlockedChars) this.unlockedChars = data.unlockedChars;
+                if (data.selectedCharId) this.selectedCharId = data.selectedCharId;
+                if (data.inventory) this.inventory = data.inventory;
+                if (data.equipped) this.equipped = data.equipped;
+                if (data.maxStreak) this.maxStreak = data.maxStreak;
+
+                this.updateUI();
+                this.renderTownCanvas();
+            }
+
+            triggerSave() {
+                const saveData = {
+                    gold: this.gold,
+                    unlockedChars: this.unlockedChars,
+                    selectedCharId: this.selectedCharId,
+                    inventory: this.inventory,
+                    equipped: this.equipped,
+                    maxStreak: this.maxStreak
+                };
+
+                if (window.saveGameDataToCloud) {
+                    window.saveGameDataToCloud(saveData);
+                }
+            }
+
+            getStats() {
+                const charObj = CHARACTERS.find(c => c.id === this.selectedCharId) || CHARACTERS[0];
+                let hp = 100 + charObj.hpBonus;
+                let mult = 1.0 + charObj.multBonus;
+
+                Object.values(this.equipped).forEach(itemId => {
+                    if (!itemId) return;
+                    const item = SHOP_ITEMS.find(i => i.id === itemId);
+                    if (item) {
+                        if (item.hp) hp += item.hp;
+                        if (item.mult) mult += item.mult;
+                    }
+                });
+
+                return { hp, mult: Math.round(mult * 100) / 100, charObj };
+            }
+
+            updateUI() {
+                const stats = this.getStats();
+
+                document.getElementById('player-gold').innerText = this.gold;
+                document.getElementById('town-char-title').innerText = stats.charObj.title;
+                document.getElementById('town-char-name').innerText = stats.charObj.name;
+                document.getElementById('stat-hp').innerText = stats.hp;
+                document.getElementById('stat-mult').innerText = `${stats.mult}x`;
+                document.getElementById('stat-streak').innerText = this.maxStreak;
+
+                this.renderGuildGrid();
+                this.renderShopGrid();
+                this.renderEquipGrid();
+            }
+
+            renderTownCanvas() {
+                const canvas = document.getElementById('town-char-canvas');
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                const stats = this.getStats();
+                drawPixelSprite(ctx, stats.charObj.spriteType, false, 3.5);
+            }
+
+            showTab(tabName) {
+                ['guild', 'shop', 'equip'].forEach(t => {
+                    document.getElementById(`tab-${t}`).classList.add('hidden');
+                    const btn = document.getElementById(`tab-btn-${t}`);
+                    btn.classList.remove('bg-amber-700', 'text-white');
+                    btn.classList.add('bg-slate-800', 'text-slate-300');
+                });
+
+                document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+                const activeBtn = document.getElementById(`tab-btn-${tabName}`);
+                activeBtn.classList.remove('bg-slate-800', 'text-slate-300');
+                activeBtn.classList.add('bg-amber-700', 'text-white');
+            }
+
+            renderGuildGrid() {
+                const grid = document.getElementById('char-grid');
+                grid.innerHTML = '';
+
+                CHARACTERS.forEach(char => {
+                    const isUnlocked = this.unlockedChars.includes(char.id);
+                    const isSelected = this.selectedCharId === char.id;
+
+                    const card = document.createElement('div');
+                    card.className = `pixel-box p-3 rounded text-center flex flex-col justify-between ${
+                        isSelected ? 'border-amber-400 bg-amber-950/40' : 'bg-slate-900 border-slate-700'
+                    }`;
+
+                    card.innerHTML = `
+                        <div>
+                            <div class="text-[10px] text-amber-400 font-bold">${char.title}</div>
+                            <div class="text-sm font-bold text-white mb-1">${char.name}</div>
+                            <div class="text-[11px] text-slate-300 space-y-0.5 mb-2">
+                                <div>HP: <span class="text-emerald-400">+${char.hpBonus}</span></div>
+                                <div>ゴールド倍率: <span class="text-amber-300">+${char.multBonus}x</span></div>
+                            </div>
+                        </div>
+                        <div class="pt-2">
+                            ${isSelected ? `
+                                <span class="block py-1.5 bg-amber-500/20 text-amber-400 font-bold text-xs rounded border border-amber-500/40">選択中</span>
+                            ` : isUnlocked ? `
+                                <button onclick="game.selectChar('${char.id}')" class="w-full pixel-btn bg-sky-600 hover:bg-sky-500 text-white font-bold py-1.5 rounded text-xs">
+                                    交代する
+                                </button>
+                            ` : `
+                                <button onclick="game.buyChar('${char.id}')" class="w-full pixel-btn ${this.gold >= char.price ? 'bg-amber-600 hover:bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-500'} font-bold py-1.5 rounded text-xs flex items-center justify-center gap-1">
+                                    <span>解放</span>
+                                    <span class="font-pixel text-[10px]">${char.price}G</span>
+                                </button>
+                            `}
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+            }
+
+            buyChar(charId) {
+                const char = CHARACTERS.find(c => c.id === charId);
+                if (!char || this.gold < char.price) return;
+
+                this.gold -= char.price;
+                this.unlockedChars.push(charId);
+                this.selectedCharId = charId;
+                this.triggerSave();
+                this.updateUI();
+                this.renderTownCanvas();
+            }
+
+            selectChar(charId) {
+                if (!this.unlockedChars.includes(charId)) return;
+                this.selectedCharId = charId;
+                this.triggerSave();
+                this.updateUI();
+                this.renderTownCanvas();
+            }
+
+            renderShopGrid() {
+                const grid = document.getElementById('shop-grid');
+                grid.innerHTML = '';
+
+                SHOP_ITEMS.forEach(item => {
+                    const isBought = this.inventory.includes(item.id);
+
+                    const card = document.createElement('div');
+                    card.className = "pixel-box p-3 rounded bg-slate-900 border-slate-700 flex items-center justify-between gap-3";
+
+                    card.innerHTML = `
+                        <div class="flex items-center gap-3">
+                            <div class="text-2xl p-2 bg-slate-950 rounded border border-slate-800">${item.icon}</div>
+                            <div>
+                                <div class="text-xs font-bold text-white">${item.name}</div>
+                                <div class="text-[11px] text-emerald-400 font-bold">${item.bonusText}</div>
+                            </div>
+                        </div>
+                        <div>
+                            ${isBought ? `
+                                <span class="text-xs text-slate-500 font-bold px-2 py-1 bg-slate-950 rounded border border-slate-800">所有済み</span>
+                            ` : `
+                                <button onclick="game.buyItem('${item.id}')" class="pixel-btn ${this.gold >= item.price ? 'bg-amber-600 hover:bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-500'} font-bold py-1 px-3 rounded text-xs">
+                                    ${item.price} G
+                                </button>
+                            `}
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+            }
+
+            buyItem(itemId) {
+                const item = SHOP_ITEMS.find(i => i.id === itemId);
+                if (!item || this.gold < item.price || this.inventory.includes(itemId)) return;
+
+                this.gold -= item.price;
+                this.inventory.push(itemId);
+
+                if (!this.equipped[item.type]) {
+                    this.equipped[item.type] = item.id;
+                }
+
+                this.triggerSave();
+                this.updateUI();
+            }
+
+            renderEquipGrid() {
+                const container = document.getElementById('equip-slots');
+                container.innerHTML = '';
+
+                const slotNames = { weapon: "⚔️ 武器", armor: "🛡️ 防具", accessory: "💍 アクセサリー" };
+
+                ['weapon', 'armor', 'accessory'].forEach(slotType => {
+                    const currentItemId = this.equipped[slotType];
+                    const currentItem = SHOP_ITEMS.find(i => i.id === currentItemId);
+
+                    const ownedItemsOfSlot = SHOP_ITEMS.filter(i => i.type === slotType && this.inventory.includes(i.id));
+
+                    const slotBox = document.createElement('div');
+                    slotBox.className = "pixel-box p-3 rounded bg-slate-900 border-slate-700 space-y-3";
+
+                    let optionsHTML = `<option value="">(なし)</option>`;
+                    ownedItemsOfSlot.forEach(i => {
+                        optionsHTML += `<option value="${i.id}" ${currentItemId === i.id ? 'selected' : ''}>${i.icon} ${i.name} (${i.bonusText})</option>`;
+                    });
+
+                    slotBox.innerHTML = `
+                        <div class="text-xs font-bold text-amber-400">${slotNames[slotType]}</div>
+                        <div class="flex items-center gap-2 bg-slate-950 p-2 rounded border border-slate-800">
+                            <div class="text-xl">${currentItem ? currentItem.icon : '❌'}</div>
+                            <div class="text-xs font-bold text-white">${currentItem ? currentItem.name : '未装備'}</div>
+                        </div>
+                        <select onchange="game.changeEquip('${slotType}', this.value)" class="w-full bg-slate-800 border border-slate-600 rounded text-xs text-white p-1.5 focus:outline-none focus:border-amber-400">
+                            ${optionsHTML}
+                        </select>
+                    `;
+                    container.appendChild(slotBox);
+                });
+            }
+
+            changeEquip(slotType, itemId) {
+                this.equipped[slotType] = itemId || null;
+                this.triggerSave();
+                this.updateUI();
+            }
+
+            startBattle(stage) {
+                this.currentStage = stage;
+                this.wave = 1;
+                this.score = 0;
+                this.combo = 0;
+
+                const stats = this.getStats();
+                this.playerHp = stats.hp;
+                this.playerMaxHp = stats.hp;
+
+                document.getElementById('screen-town').classList.add('hidden');
+                document.getElementById('screen-result').classList.add('hidden');
+                document.getElementById('screen-battle').classList.remove('hidden');
+
+                const stageTitleMap = { 
+                    elem: "EASY (小学生レベル)",
+                    grade1: "NORMAL (中学1年生レベル)", 
+                    grade2: "HARD (中学2年生レベル)", 
+                    gradeAll: "EXPERT (中学全般レベル)" 
+                };
+                document.getElementById('battle-stage-name').innerText = stageTitleMap[stage];
+
+                this.setupWave();
+            }
+
+            setupWave() {
+                document.getElementById('wave-count').innerText = this.wave;
+                document.getElementById('battle-score').innerText = this.score;
+
+                const enemyTypes = ["slime", "goblin", "dragon", "demon"];
+                const enemyNames = ["スライム", "ゴブリン", "ドラゴン", "デーモン"];
+                const idx = Math.min(Math.floor((this.wave - 1) / 3), enemyTypes.length - 1);
+
+                this.enemyType = enemyTypes[idx];
+                this.enemyName = enemyNames[idx];
+                this.enemyHp = 30 + this.wave * 15;
+                this.enemyMaxHp = this.enemyHp;
+
+                document.getElementById('enemy-name').innerText = this.enemyName;
+
+                this.updateHpDisplay();
+                this.renderBattleCanvases();
+
+                this.nextQuestion();
+            }
+
+            updateHpDisplay() {
+                const playerPct = Math.max(0, (this.playerHp / this.playerMaxHp) * 100);
+                const enemyPct = Math.max(0, (this.enemyHp / this.enemyMaxHp) * 100);
+
+                document.getElementById('player-hp-bar').style.width = `${playerPct}%`;
+                document.getElementById('player-hp-text').innerText = `${this.playerHp}/${this.playerMaxHp}`;
+
+                document.getElementById('enemy-hp-bar').style.width = `${enemyPct}%`;
+                document.getElementById('enemy-hp-text').innerText = `${this.enemyHp}/${this.enemyMaxHp}`;
+            }
+
+            renderBattleCanvases() {
+                const pCanvas = document.getElementById('canvas-player');
+                const eCanvas = document.getElementById('canvas-enemy');
+                const stats = this.getStats();
+
+                drawPixelSprite(pCanvas.getContext('2d'), stats.charObj.spriteType, false, 3.5);
+                drawPixelSprite(eCanvas.getContext('2d'), this.enemyType, true, 3.5);
+            }
+
+            nextQuestion() {
+                clearInterval(this.timer);
+
+                const list = WORD_DATABASE[this.currentStage];
+                const qObj = list[Math.floor(Math.random() * list.length)];
+                this.currentQuestion = qObj;
+
+                document.getElementById('question-word').innerText = qObj.word;
+                document.getElementById('question-phonetic').innerText = `[${qObj.pos}]`;
+
+                const choices = [qObj.meaning];
+                while (choices.length < 4) {
+                    const randomWord = list[Math.floor(Math.random() * list.length)];
+                    if (!choices.includes(randomWord.meaning)) {
+                        choices.push(randomWord.meaning);
+                    }
+                }
+                choices.sort(() => Math.random() - 0.5);
+
+                const grid = document.getElementById('options-grid');
+                grid.innerHTML = '';
+
+                choices.forEach((choiceText, index) => {
+                    const btn = document.createElement('button');
+                    btn.className = "pixel-btn bg-slate-800 hover:bg-slate-700 text-white font-bold p-3 md:p-4 rounded text-sm md:text-base text-left flex items-center justify-between";
+                    btn.innerHTML = `
+                        <span>${index + 1}. ${choiceText}</span>
+                        <span class="text-xs text-slate-500 font-mono">[Key ${index + 1}]</span>
+                    `;
+                    btn.onclick = () => this.handleAnswer(choiceText === qObj.meaning);
+                    grid.appendChild(btn);
+                });
+
+                this.startTimer();
+            }
+
+            startTimer() {
+                this.timeLeft = 100;
+                const timerBar = document.getElementById('timer-bar');
+
+                this.timer = setInterval(() => {
+                    this.timeLeft -= 1.5;
+                    timerBar.style.width = `${Math.max(0, this.timeLeft)}%`;
+
+                    if (this.timeLeft <= 0) {
+                        clearInterval(this.timer);
+                        this.handleAnswer(false);
+                    }
+                }, 100);
+            }
+
+            handleAnswer(isCorrect) {
+                clearInterval(this.timer);
+
+                const playerEl = document.getElementById('player-unit');
+                const enemyEl = document.getElementById('enemy-unit');
+                const effectEl = document.getElementById('battle-effect');
+
+                if (isCorrect) {
+                    playerEl.classList.add('anim-attack-player');
+                    setTimeout(() => playerEl.classList.remove('anim-attack-player'), 300);
+
+                    enemyEl.classList.add('anim-damage');
+                    setTimeout(() => enemyEl.classList.remove('anim-damage'), 400);
+
+                    const dmg = 25;
+                    this.enemyHp -= dmg;
+                    this.score += 10 + this.combo * 2;
+                    this.combo++;
+                    if (this.combo > this.maxStreak) this.maxStreak = this.combo;
+
+                    effectEl.innerText = "HIT! 正解!";
+                    effectEl.className = "absolute inset-0 pointer-events-none flex items-center justify-center font-bold text-xl md:text-3xl text-emerald-400 z-20 opacity-100 transition-opacity";
+
+                } else {
+                    enemyEl.classList.add('anim-attack-enemy');
+                    setTimeout(() => enemyEl.classList.remove('anim-attack-enemy'), 300);
+
+                    playerEl.classList.add('anim-damage');
+                    setTimeout(() => playerEl.classList.remove('anim-damage'), 400);
+
+                    this.playerHp -= 20;
+                    this.combo = 0;
+
+                    effectEl.innerText = "MISS! ダメージ!";
+                    effectEl.className = "absolute inset-0 pointer-events-none flex items-center justify-center font-bold text-xl md:text-3xl text-rose-500 z-20 opacity-100 transition-opacity";
+                }
+
+                this.updateHpDisplay();
+
+                setTimeout(() => {
+                    effectEl.classList.add('opacity-0');
+
+                    if (this.playerHp <= 0) {
+                        this.endGame(false);
+                    } else if (this.enemyHp <= 0) {
+                        if (this.wave >= this.maxWave) {
+                            this.endGame(true);
+                        } else {
+                            this.wave++;
+                            this.setupWave();
+                        }
+                    } else {
+                        this.nextQuestion();
+                    }
+                }, 800);
+            }
+
+            endGame(isClear) {
+                clearInterval(this.timer);
+
+                document.getElementById('screen-battle').classList.add('hidden');
+                document.getElementById('screen-result').classList.remove('hidden');
+
+                const stats = this.getStats();
+
+                if (isClear) {
+                    document.getElementById('result-header-icon').innerText = '🏆';
+                    document.getElementById('result-title').innerText = 'ダンジョン全制覇！';
+                    document.getElementById('result-subtitle').innerText = 'すべての試練を突破した！';
+                } else {
+                    document.getElementById('result-header-icon').innerText = '💀';
+                    document.getElementById('result-title').innerText = '敗北...';
+                    document.getElementById('result-subtitle').innerText = 'HPがゼロになってしまった';
+                }
+
+                const baseGold = this.score * (isClear ? 2 : 1);
+                const totalGold = Math.floor(baseGold * stats.mult);
+
+                this.gold += totalGold;
+
+                document.getElementById('res-correct').innerText = `${this.score / 10} 問`;
+                document.getElementById('res-combo').innerText = `${this.combo}`;
+                document.getElementById('res-base-gold').innerText = `+${baseGold} G`;
+                document.getElementById('res-bonus-mult').innerText = `x${stats.mult}`;
+                document.getElementById('res-total-gold').innerText = `+${totalGold} G`;
+
+                this.triggerSave();
+                this.updateUI();
+            }
+
+            showTown() {
+                document.getElementById('screen-result').classList.add('hidden');
+                document.getElementById('screen-battle').classList.add('hidden');
+                document.getElementById('screen-town').classList.remove('hidden');
+                this.renderTownCanvas();
+            }
+
+            retryBattle() {
+                this.startBattle(this.currentStage);
+            }
+        }
+
+        // キーボード操作対応
+        window.addEventListener('keydown', (e) => {
+            if (!window.game) return;
+            const key = e.key;
+            if (['1', '2', '3', '4'].includes(key)) {
+                const idx = parseInt(key) - 1;
+                const btns = document.querySelectorAll('#options-grid button');
+                if (btns && btns[idx]) {
+                    btns[idx].click();
+                }
+            }
+        });
+
+        // 起動処理
+        window.addEventListener('DOMContentLoaded', () => {
+            window.game = new PixelRPGGame();
+            lucide.createIcons();
+        });
+    </script>
+</body>
+</html>
