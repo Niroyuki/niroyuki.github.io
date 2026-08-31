@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>確率五目並べ - Probabilistic Gomoku</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"M PLUS Rounded 1c"', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'monospace']
+                    },
+                    colors: {
+                        board: '#e4b267',
+                        boardDark: '#c99347',
+                        qblack: '#1e293b',
+                        qwhite: '#f8fafc',
+                        accent: '#6366f1'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+            color: #f8fafc;
+            user-select: none;
+        }
+        
+        .board-grid {
+            display: grid;
+            grid-template-columns: 28px repeat(13, minmax(0, 1fr));
+            grid-template-rows: 28px repeat(13, minmax(0, 1fr));
+        }
+
+        .board-cell {
+            position: relative;
+            aspect-ratio: 1 / 1;
+        }
+
+        /* Go board grid line overlays */
+        .grid-line-h {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background-color: #644412;
+            transform: translateY(-50%);
+            z-index: 1;
+        }
+
+        .grid-line-v {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background-color: #644412;
+            transform: translateX(-50%);
+            z-index: 1;
+        }
+
+        /* Adjust lines for board edges */
+        .edge-left .grid-line-h { left: 50%; }
+        .edge-right .grid-line-h { right: 50%; }
+        .edge-top .grid-line-v { top: 50%; }
+        .edge-bottom .grid-line-v { bottom: 50%; }
+
+        .star-point {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background-color: #523508;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2;
+        }
+
+        .piece-slot {
+            position: absolute;
+            inset: 2px;
+            border-radius: 50%;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .piece-slot:hover:not(.occupied) {
+            background-color: rgba(99, 102, 241, 0.35);
+            border: 2px dashed #818cf8;
+        }
+
+        /* Quantum superposition pulsing effect */
+        @keyframes superpositionPulse {
+            0%, 100% { transform: scale(1); opacity: 0.95; }
+            50% { transform: scale(1.04); opacity: 0.85; box-shadow: 0 0 12px rgba(99, 102, 241, 0.6); }
+        }
+
+        .superposition {
+            animation: superpositionPulse 2.5s infinite ease-in-out;
+        }
+
+        /* Observation / Quantum collapse animation */
+        @keyframes collapseSpin {
+            0% { transform: scale(1) rotate(0deg); }
+            50% { transform: scale(1.25) rotate(180deg); filter: brightness(1.8); }
+            100% { transform: scale(1) rotate(360deg); }
+        }
+
+        .collapsing {
+            animation: collapseSpin 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        /* Return to superposition animation */
+        @keyframes decoherence {
+            0% { opacity: 1; transform: scale(1.1); }
+            50% { opacity: 0.4; filter: blur(3px); }
+            100% { opacity: 0.95; transform: scale(1); filter: blur(0); }
+        }
+
+        .decohering {
+            animation: decoherence 0.8s ease-out;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans antialiased text-slate-100">
+
+    <!-- Header -->
+    <header class="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-50 py-3 px-4 sm:px-8">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="bg-gradient-to-tr from-indigo-600 to-violet-500 p-2.5 rounded-xl shadow-lg shadow-indigo-500/30">
+                    <i class="fa-solid font-mono text-xl text-white">⚛️</i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-extrabold tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 via-purple-300 to-pink-400">
+                        確率五目並べ <span class="text-xs font-mono px-2 py-0.5 rounded bg-indigo-950/80 border border-indigo-500/40 text-indigo-300 ml-1">13×13 Quantum Edition</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">観測するまで色が確定しない、確率と戦略の新感覚五目並べ</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <button id="btnRuleModal" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium border border-slate-700 transition flex items-center gap-1.5 text-slate-300">
+                    <i class="fa-solid fa-circle-question text-indigo-400"></i> ルール解説
+                </button>
+                <button id="btnReset" class="px-3 py-1.5 rounded-lg bg-rose-900/40 hover:bg-rose-800/60 text-xs font-medium border border-rose-700/50 transition flex items-center gap-1.5 text-rose-300">
+                    <i class="fa-solid fa-rotate-left"></i> 最初から
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        <!-- Left Panel: Game Controls & Status -->
+        <div class="lg:col-span-4 flex flex-col gap-4">
+            
+            <!-- Mode Selector & Turn Info -->
+            <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 shadow-xl backdrop-blur-sm">
+                <div class="flex items-center justify-between mb-3 pb-2 border-b border-slate-800">
+                    <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">対戦モード設定</span>
+                    <div class="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+                        <button id="modePvP" class="px-3 py-1 rounded-lg transition font-medium bg-indigo-600 text-white shadow">対人戦</button>
+                        <button id="modePvE" class="px-3 py-1 rounded-lg transition font-medium text-slate-400 hover:text-white">vs CPU</button>
+                    </div>
+                </div>
+
+                <!-- Current Turn Banner -->
+                <div id="turnCard" class="p-4 rounded-xl border transition-all duration-300 bg-slate-950/70 border-slate-800 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div id="turnBadge" class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg shadow-inner">
+                            ●
+                        </div>
+                        <div>
+                            <div id="turnPlayerName" class="font-bold text-sm text-slate-200">黒の手番 (1手目)</div>
+                            <div id="turnSubText" class="text-xs text-slate-400">盤面に駒を配置してください</div>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div id="placedCount" class="text-xs font-mono text-indigo-400">配置数: 0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Next Piece Specifications -->
+            <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 shadow-xl backdrop-blur-sm">
+                <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center justify-between">
+                    <span>次に打つ駒の仕様</span>
+                    <span id="pieceTypeBadge" class="normal-case text-xs px-2 py-0.5 rounded-full bg-indigo-900/50 text-indigo-300 border border-indigo-700/50">タイプ A</span>
+                </h3>
+
+                <div class="bg-slate-950/90 rounded-xl p-3 border border-slate-800 flex items-center gap-3">
+                    <!-- Visual Piece Preview -->
+                    <div id="nextPiecePreview" class="w-10 h-10 rounded-full flex items-center justify-center font-mono font-black text-xs shadow-md shrink-0 border border-slate-600 bg-slate-900 text-white">
+                        90
+                    </div>
+                    <div class="flex-1 flex flex-col gap-1.5">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-slate-300">黒の出現確率:</span>
+                            <span id="probDistributionText" class="text-xs font-bold font-mono text-indigo-300">90% 黒 / 10% 白</span>
+                        </div>
+
+                        <!-- Visual Probability Bar -->
+                        <div class="w-full h-3 bg-slate-800 rounded-full overflow-hidden flex border border-slate-700">
+                            <div id="blackProbBar" class="h-full bg-slate-900 text-white text-[9px] font-mono flex items-center justify-center transition-all duration-300" style="width: 90%;">90%</div>
+                            <div id="whiteProbBar" class="h-full bg-slate-100 text-slate-900 text-[9px] font-mono flex items-center justify-center transition-all duration-300" style="width: 10%;">10%</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Area: Observe & Skip Buttons -->
+            <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 shadow-xl backdrop-blur-sm flex flex-col gap-3">
+                <!-- Observation Charges Indicator -->
+                <div class="flex items-center justify-between text-xs font-semibold px-1">
+                    <div class="flex items-center gap-1.5 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
+                        <span class="text-slate-400">黒の観測権:</span>
+                        <span id="blackObsBadge" class="font-mono text-amber-400 font-bold">5 / 5</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
+                        <span class="text-slate-400">白の観測権:</span>
+                        <span id="whiteObsBadge" class="font-mono text-cyan-300 font-bold">5 / 5</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button id="btnObserve" disabled class="py-3 px-3 rounded-xl font-extrabold text-xs sm:text-sm tracking-wider uppercase transition-all duration-300 shadow-lg flex items-center justify-center gap-1.5 bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700">
+                        <i class="fa-solid fa-eye text-base"></i>
+                        <span>観測する (残5回)</span>
+                    </button>
+                    <button id="btnSkipObserve" disabled class="py-3 px-3 rounded-xl font-extrabold text-xs sm:text-sm tracking-wider uppercase transition-all duration-300 shadow-lg flex items-center justify-center gap-1.5 bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700">
+                        <i class="fa-solid fa-forward-step text-base"></i>
+                        <span>観測せず終了</span>
+                    </button>
+                </div>
+
+                <p class="text-[11px] text-slate-400 text-center">
+                    観測権は各プレイヤー【5回まで】。観測せずスキップして手番を移動することも可能です。
+                </p>
+            </div>
+
+            <!-- Game Log & Statistics -->
+            <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 shadow-xl backdrop-blur-sm flex flex-col flex-1 min-h-[160px]">
+                <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <i class="fa-solid fa-scroll text-indigo-400"></i> 対局ログ
+                </h3>
+                <div id="gameLog" class="flex-1 bg-slate-950/80 rounded-xl p-3 border border-slate-800 text-xs font-mono space-y-1.5 overflow-y-auto max-h-[180px] text-slate-300">
+                    <div class="text-slate-500 italic">対局が開始されました。13×13の盤面に駒を配置してください。</div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right Panel: Board Area -->
+        <div class="lg:col-span-8 flex flex-col items-center justify-center">
+            
+            <div class="w-full max-w-[660px] bg-slate-900 border border-slate-800 p-3 sm:p-5 rounded-3xl shadow-2xl flex flex-col items-center relative">
+                
+                <!-- Board Header Info -->
+                <div class="w-full flex items-center justify-between mb-3 px-2">
+                    <div class="flex items-center gap-2 text-xs font-mono text-slate-400">
+                        <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span>盤面サイズ: 13 × 13</span>
+                    </div>
+                    <div id="boardMessage" class="text-xs font-medium text-amber-300 bg-amber-950/40 border border-amber-800/50 px-3 py-1 rounded-full">
+                        手番：駒を空きマスに打ってください
+                    </div>
+                </div>
+
+                <!-- Actual Go Board Container -->
+                <div class="w-full aspect-square bg-gradient-to-br from-[#ebbb76] via-[#e4b267] to-[#cc9543] rounded-2xl shadow-2xl p-2 sm:p-3 border-4 border-[#8f5d18] relative overflow-hidden">
+                    
+                    <!-- Grid System -->
+                    <div id="boardGrid" class="board-grid w-full h-full text-slate-800 font-bold select-none">
+                        <!-- Javascript will generate coordinates (A-M, 1-13) and 13x13 cell slots here -->
+                    </div>
+
+                </div>
+
+                <!-- Footer Board Coordinates Helper -->
+                <div class="w-full flex items-center justify-between text-[11px] font-mono text-slate-500 mt-3 px-2">
+                    <span>横軸: A 〜 M (列)</span>
+                    <span>縦軸: 1 〜 13 (行)</span>
+                </div>
+
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Rules Modal -->
+    <div id="ruleModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-800 max-w-xl w-full rounded-3xl p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+            <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+                <h2 class="text-lg font-bold text-slate-100 flex items-center gap-2">
+                    <i class="fa-solid fa-graduation-cap text-indigo-400"></i> 確率五目並べのルール
+                </h2>
+                <button id="btnCloseModal" class="text-slate-400 hover:text-white p-2 rounded-lg transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto py-4 space-y-4 text-xs sm:text-sm text-slate-300 leading-relaxed pr-1">
+                <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-amber-400 mb-1">1. 盤面と座標</h3>
+                    <p>13×13 マスの盤面を使用します。横軸はエクセルのように <span class="font-mono text-indigo-300">A〜M</span>、縦軸は <span class="font-mono text-indigo-300">1〜13</span> で表記されます。</p>
+                </div>
+
+                <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-amber-400 mb-1">2. ２種類の確率駒</h3>
+                    <p class="mb-2">プレイヤーは手番ごとに以下の2種類の駒を<strong class="text-white">交互に</strong>打ちます：</p>
+                    <ul class="list-disc pl-5 space-y-1 text-slate-300">
+                        <li><strong class="text-slate-100">黒の駒:</strong> 「90%黒 / 10%白」 と 「70%黒 / 30%白」</li>
+                        <li><strong class="text-slate-100">白の駒:</strong> 「90%白 / 10%黒」 と 「70%白 / 30%黒」</li>
+                    </ul>
+                </div>
+
+                <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-amber-400 mb-1">3. 手番の流れと観測権（各5回）</h3>
+                    <ol class="list-decimal pl-5 space-y-1">
+                        <li>盤面の空きマスを選び <strong class="text-indigo-300">【駒を置く】</strong>（重ね合わせ状態）。</li>
+                        <li>駒を置いた後、<strong class="text-indigo-300">【観測する】</strong> か <strong class="text-slate-300">【観測せず終了】</strong>（スキップ）を選択します。</li>
+                        <li><strong class="text-rose-400">観測権は各プレイヤー対局中5回まで</strong>しか使えません。</li>
+                    </ol>
+                </div>
+
+                <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+                    <h3 class="font-bold text-amber-400 mb-1">4. 観測結果と勝利条件</h3>
+                    <p class="mb-1">【観測する】を押すと、盤面上すべての駒の色が一斉に収束します。</p>
+                    <ul class="list-disc pl-5 space-y-1">
+                        <li>縦・横・斜めのいずれかに5連が並べばその色の勝利！</li>
+                        <li>5連が揃わなければ駒は元の確率（重ね合わせ）状態に戻り対局を続行します。</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="pt-4 border-t border-slate-800 text-right">
+                <button id="btnGotIt" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition text-xs">
+                    理解しました！
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Game Constants & Rules
+        const BOARD_SIZE = 13;
+        const COL_LABELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M'];
+
+        // State variables
+        let gameMode = 'PvP'; // 'PvP' or 'PvE'
+        let currentPlayer = 'black'; // 'black' or 'white'
+        let turnCount = 1;
+        let blackTurnTypeCount = 0; // even: 90% black, odd: 70% black
+        let whiteTurnTypeCount = 0; // even: 90% white, odd: 70% white
+        let blackObsCount = 5; // Observation charges (max 5)
+        let whiteObsCount = 5; // Observation charges (max 5)
+        let boardState = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(null)); 
+        let hasPlacedPieceThisTurn = false;
+        let pendingPiecePos = null;
+        let isGameFinished = false;
+        let isObserving = false;
+
+        // Star points for 13x13 board
+        const STAR_POINTS = [
+            {r: 3, c: 3}, {r: 3, c: 9},
+            {r: 6, c: 6},
+            {r: 9, c: 3}, {r: 9, c: 9}
+        ];
+
+        // DOM Element references
+        const boardGrid = document.getElementById('boardGrid');
+        const btnObserve = document.getElementById('btnObserve');
+        const btnSkipObserve = document.getElementById('btnSkipObserve');
+        const blackObsBadge = document.getElementById('blackObsBadge');
+        const whiteObsBadge = document.getElementById('whiteObsBadge');
+        const btnReset = document.getElementById('btnReset');
+        const modePvP = document.getElementById('modePvP');
+        const modePvE = document.getElementById('modePvE');
+        const turnCard = document.getElementById('turnCard');
+        const turnBadge = document.getElementById('turnBadge');
+        const turnPlayerName = document.getElementById('turnPlayerName');
+        const turnSubText = document.getElementById('turnSubText');
+        const placedCount = document.getElementById('placedCount');
+        const pieceTypeBadge = document.getElementById('pieceTypeBadge');
+        const probDistributionText = document.getElementById('probDistributionText');
+        const blackProbBar = document.getElementById('blackProbBar');
+        const whiteProbBar = document.getElementById('whiteProbBar');
+        const boardMessage = document.getElementById('boardMessage');
+        const gameLog = document.getElementById('gameLog');
+        const ruleModal = document.getElementById('ruleModal');
+        const btnRuleModal = document.getElementById('btnRuleModal');
+        const btnCloseModal = document.getElementById('btnCloseModal');
+        const btnGotIt = document.getElementById('btnGotIt');
+
+        function initBoardUI() {
+            boardGrid.innerHTML = '';
+
+            // Top-Left empty header cell
+            const corner = document.createElement('div');
+            corner.className = 'flex items-center justify-center text-[10px] text-slate-700 font-mono';
+            boardGrid.appendChild(corner);
+
+            // Column Header (A-M)
+            for (let c = 0; c < BOARD_SIZE; c++) {
+                const header = document.createElement('div');
+                header.className = 'flex items-center justify-center text-[11px] font-mono text-slate-800 font-extrabold';
+                header.textContent = COL_LABELS[c];
+                boardGrid.appendChild(header);
+            }
+
+            // Grid Rows (1-13)
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                // Row Label
+                const rowHeader = document.createElement('div');
+                rowHeader.className = 'flex items-center justify-center text-[11px] font-mono text-slate-800 font-extrabold';
+                rowHeader.textContent = r + 1;
+                boardGrid.appendChild(rowHeader);
+
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'board-cell';
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+
+                    // Edge classes for drawing neat grid lines
+                    if (r === 0) cell.classList.add('edge-top');
+                    if (r === BOARD_SIZE - 1) cell.classList.add('edge-bottom');
+                    if (c === 0) cell.classList.add('edge-left');
+                    if (c === BOARD_SIZE - 1) cell.classList.add('edge-right');
+
+                    // Grid lines
+                    const lineH = document.createElement('div');
+                    lineH.className = 'grid-line-h';
+                    cell.appendChild(lineH);
+
+                    const lineV = document.createElement('div');
+                    lineV.className = 'grid-line-v';
+                    cell.appendChild(lineV);
+
+                    // Star Point check
+                    if (STAR_POINTS.some(p => p.r === r && p.c === c)) {
+                        const star = document.createElement('div');
+                        star.className = 'star-point';
+                        cell.appendChild(star);
+                    }
+
+                    // Piece container slot
+                    const slot = document.createElement('div');
+                    slot.className = 'piece-slot';
+                    slot.id = `slot-${r}-${c}`;
+                    slot.addEventListener('click', () => handleCellClick(r, c));
+                    cell.appendChild(slot);
+
+                    boardGrid.appendChild(cell);
+                }
+            }
+        }
+
+        function getCurrentProbabilities() {
+            if (currentPlayer === 'black') {
+                const is90 = (blackTurnTypeCount % 2 === 0);
+                return is90 ? { pBlack: 0.9, pWhite: 0.1, label: '90% 黒 / 10% 白', type: 'タイプ A (90%)' }
+                            : { pBlack: 0.7, pWhite: 0.3, label: '70% 黒 / 30% 白', type: 'タイプ B (70%)' };
+            } else {
+                const is90 = (whiteTurnTypeCount % 2 === 0);
+                return is90 ? { pBlack: 0.1, pWhite: 0.9, label: '90% 白 / 10% 黒', type: 'タイプ A (90%)' }
+                            : { pBlack: 0.3, pWhite: 0.7, label: '70% 白 / 30% 黒', type: 'タイプ B (70%)' };
+            }
+        }
+
+        function updateTurnUI() {
+            const probInfo = getCurrentProbabilities();
+
+            // Update Observation Charges Badges
+            blackObsBadge.textContent = `${blackObsCount} / 5`;
+            whiteObsBadge.textContent = `${whiteObsCount} / 5`;
+
+            // Player Badge & Card Color
+            if (currentPlayer === 'black') {
+                turnBadge.className = 'w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg shadow-inner bg-slate-900 text-white border-2 border-slate-700';
+                turnBadge.textContent = '●';
+                turnPlayerName.textContent = `黒の手番 (第${turnCount}手)`;
+                turnCard.className = 'p-4 rounded-xl border transition-all duration-300 bg-slate-900/90 border-slate-700 shadow-lg';
+            } else {
+                turnBadge.className = 'w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg shadow-inner bg-slate-100 text-slate-900 border-2 border-white';
+                turnBadge.textContent = '○';
+                turnPlayerName.textContent = `白の手番 (${gameMode === 'PvE' ? 'CPU' : '第' + turnCount + '手'})`;
+                turnCard.className = 'p-4 rounded-xl border transition-all duration-300 bg-slate-800/90 border-indigo-500/50 shadow-lg';
+            }
+
+            pieceTypeBadge.textContent = probInfo.type;
+            probDistributionText.textContent = probInfo.label;
+
+            const blackPct = Math.round(probInfo.pBlack * 100);
+            const whitePct = Math.round(probInfo.pWhite * 100);
+
+            blackProbBar.style.width = `${blackPct}%`;
+            blackProbBar.textContent = `${blackPct}%`;
+            whiteProbBar.style.width = `${whitePct}%`;
+            whiteProbBar.textContent = `${whitePct}%`;
+
+            // Update Next Piece Visual Stone Preview
+            const previewSlot = document.getElementById('nextPiecePreview');
+            if (previewSlot) {
+                const pBlackPct = Math.round(probInfo.pBlack * 100);
+                const visual = getPieceVisualProps(pBlackPct);
+                previewSlot.className = `w-10 h-10 rounded-full flex items-center justify-center font-mono font-black text-xs sm:text-sm shadow-md border ${visual.borderColor} ${visual.textColor} superposition`;
+                previewSlot.style = visual.bgStyle;
+                previewSlot.textContent = pBlackPct;
+            }
+
+            const currentObsLeft = (currentPlayer === 'black') ? blackObsCount : whiteObsCount;
+
+            if (hasPlacedPieceThisTurn) {
+                turnSubText.textContent = '【観測する】か【観測せず終了】を選択してください';
+                
+                // Observe Button Logic
+                if (currentObsLeft > 0) {
+                    btnObserve.disabled = false;
+                    btnObserve.className = 'py-3 px-3 rounded-xl font-extrabold text-xs sm:text-sm tracking-wider uppercase transition-all duration-300 shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-1.5 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white border border-indigo-400/50 cursor-pointer animate-pulse';
+                    btnObserve.querySelector('span').textContent = `観測する (残${currentObsLeft}回)`;
+                } else {
+                    btnObserve.disabled = true;
+                    btnObserve.className = 'py-3 px-3 rounded-xl font-extrabold text-xs sm:text-sm tracking-wider uppercase transition-all duration-300 shadow-lg flex items-center justify-center gap-1.5 bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700';
+                    btnObserve.querySelector('span').textContent = `観測不可 (残0回)`;
+                }
+
+                // Skip Button Logic
+                btnSkipObserve.disabled = false;
+                btnSkipObserve.className = 'py-3 px-3 rounded-xl font-extrabold text-xs sm:text-sm tracking-wider uppercase transition-all duration-300 shadow-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 cursor-pointer';
+            } else {
+                turnSubText.textContent = '盤面の空きマスに駒を配置してください';
+                btnObserve.disabled = true;
+                btnObserve.className = 'py-3 px-3 rounded-xl font-extrabold text-xs sm:text-sm tracking-wider uppercase transition-all duration-300 shadow-lg flex items-center justify-center gap-1.5 bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700';
+                btnObserve.querySelector('span').textContent = `観測する (残${currentObsLeft}回)`;
+
+                btnSkipObserve.disabled = true;
+                btnSkipObserve.className = 'py-3 px-3 rounded-xl font-extrabold text-xs sm:text-sm tracking-wider uppercase transition-all duration-300 shadow-lg flex items-center justify-center gap-1.5 bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700';
+            }
+
+            // Total placed pieces count
+            let total = 0;
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    if (boardState[r][c] !== null) total++;
+                }
+            }
+            placedCount.textContent = `盤面の駒数: ${total}`;
+
+            // Trigger CPU turn if applicable
+            if (gameMode === 'PvE' && currentPlayer === 'white' && !isGameFinished && !isObserving && !hasPlacedPieceThisTurn) {
+                setTimeout(handleCpuTurn, 600);
+            }
+        }
+
+        function handleCellClick(r, c) {
+            if (isGameFinished || isObserving) return;
+            if (gameMode === 'PvE' && currentPlayer === 'white') return; // Wait for CPU
+            if (hasPlacedPieceThisTurn) {
+                logMessage('※ 1手番に打てる駒は1回のみです。【観測する】か【観測せず終了】を選択してください。', 'text-amber-400');
+                return;
+            }
+
+            if (boardState[r][c] !== null) {
+                logMessage('※ 既に駒が置かれているマスには重ねて置けません。', 'text-rose-400');
+                return;
+            }
+
+            placePiece(r, c);
+        }
+
+        function placePiece(r, c) {
+            const prob = getCurrentProbabilities();
+            
+            boardState[r][c] = {
+                probBlack: prob.pBlack,
+                probWhite: prob.pWhite,
+                owner: currentPlayer,
+                currentObserved: null
+            };
+
+            hasPlacedPieceThisTurn = true;
+            pendingPiecePos = { r, c };
+
+            renderCell(r, c);
+            const posCode = `${COL_LABELS[c]}${r + 1}`;
+            logMessage(`${currentPlayer === 'black' ? '黒' : '白'} が <span class="font-bold text-amber-300">${posCode}</span> に駒配置 (${prob.label})`, 'text-indigo-200');
+
+            boardMessage.textContent = `${posCode} に配置完了。【観測する】または【観測せず終了】を選択`;
+            updateTurnUI();
+        }
+
+        // Helper to determine piece shading and style based on Black probability percentage
+        function getPieceVisualProps(pBlackPct) {
+            if (pBlackPct >= 80) { // 90% Black
+                return {
+                    bgStyle: 'background: radial-gradient(circle at 35% 35%, #334155 0%, #0f172a 70%, #020617 100%);',
+                    textColor: 'text-slate-100',
+                    borderColor: 'border-slate-500'
+                };
+            } else if (pBlackPct >= 60) { // 70% Black
+                return {
+                    bgStyle: 'background: radial-gradient(circle at 35% 35%, #64748b 0%, #334155 70%, #1e293b 100%);',
+                    textColor: 'text-slate-100',
+                    borderColor: 'border-slate-400'
+                };
+            } else if (pBlackPct >= 20) { // 30% Black
+                return {
+                    bgStyle: 'background: radial-gradient(circle at 35% 35%, #f1f5f9 0%, #cbd5e1 70%, #94a3b8 100%);',
+                    textColor: 'text-slate-900',
+                    borderColor: 'border-slate-300'
+                };
+            } else { // 10% Black
+                return {
+                    bgStyle: 'background: radial-gradient(circle at 35% 35%, #ffffff 0%, #f8fafc 70%, #e2e8f0 100%);',
+                    textColor: 'text-slate-900',
+                    borderColor: 'border-slate-200'
+                };
+            }
+        }
+
+        function renderCell(r, c) {
+            const slot = document.getElementById(`slot-${r}-${c}`);
+            if (!slot) return;
+
+            const piece = boardState[r][c];
+            slot.innerHTML = '';
+            slot.className = 'piece-slot occupied';
+
+            if (!piece) {
+                slot.className = 'piece-slot';
+                return;
+            }
+
+            const pBlackPct = Math.round(piece.probBlack * 100);
+
+            // Case A: Observed state (Deterministic solid black or white stone)
+            if (piece.currentObserved !== null) {
+                const isBlack = piece.currentObserved === 'black';
+                const styleClass = isBlack 
+                    ? 'bg-slate-950 text-white border-2 border-slate-700 shadow-xl' 
+                    : 'bg-slate-100 text-slate-900 border-2 border-slate-300 shadow-xl';
+
+                slot.innerHTML = `
+                    <div class="w-full h-full rounded-full flex items-center justify-center font-extrabold text-xs sm:text-sm ${styleClass}">
+                        ${isBlack ? '●' : '○'}
+                    </div>
+                `;
+            } 
+            // Case B: Quantum superposition (Display Black probability number & blackness shade)
+            else {
+                const visual = getPieceVisualProps(pBlackPct);
+
+                slot.innerHTML = `
+                    <div class="w-full h-full rounded-full superposition flex items-center justify-center font-mono font-black text-xs sm:text-sm shadow-md border ${visual.borderColor} ${visual.textColor}"
+                         style="${visual.bgStyle}">
+                        ${pBlackPct}
+                    </div>
+                `;
+            }
+        }
+
+        btnObserve.addEventListener('click', performObservation);
+        btnSkipObserve.addEventListener('click', skipObservation);
+
+        function skipObservation() {
+            if (!hasPlacedPieceThisTurn || isGameFinished || isObserving) return;
+
+            logMessage(`${currentPlayer === 'black' ? '黒' : '白'} プレイヤーが観測をスキップして手番を終了しました。`, 'text-slate-400');
+            advanceTurn();
+        }
+
+        function advanceTurn() {
+            if (currentPlayer === 'black') {
+                blackTurnTypeCount++;
+                currentPlayer = 'white';
+            } else {
+                whiteTurnTypeCount++;
+                currentPlayer = 'black';
+                turnCount++;
+            }
+
+            hasPlacedPieceThisTurn = false;
+            pendingPiecePos = null;
+            isObserving = false;
+            boardMessage.textContent = '手番：駒を空きマスに打ってください';
+            updateTurnUI();
+        }
+
+        function performObservation() {
+            if (!hasPlacedPieceThisTurn || isGameFinished || isObserving) return;
+
+            // Check remaining observation charges
+            if (currentPlayer === 'black' && blackObsCount <= 0) return;
+            if (currentPlayer === 'white' && whiteObsCount <= 0) return;
+
+            // Deduct observation charge
+            if (currentPlayer === 'black') {
+                blackObsCount--;
+            } else {
+                whiteObsCount--;
+            }
+
+            const remaining = (currentPlayer === 'black') ? blackObsCount : whiteObsCount;
+
+            isObserving = true;
+            btnObserve.disabled = true;
+            btnSkipObserve.disabled = true;
+            boardMessage.textContent = '波動関数が収束中... 観測を行っています！';
+            logMessage(`【観測実行】${currentPlayer === 'black' ? '黒' : '白'}が観測権を使用しました (残り観測: ${remaining}回)`, 'text-cyan-300 font-bold');
+
+            // Add collapse animation to all occupied cells
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    if (boardState[r][c] !== null) {
+                        const slot = document.getElementById(`slot-${r}-${c}`);
+                        if (slot) slot.classList.add('collapsing');
+                    }
+                }
+            }
+
+            // Step 1: Resolve all probabilities (Dice rolling)
+            setTimeout(() => {
+                let blackObservedCount = 0;
+                let whiteObservedCount = 0;
+
+                for (let r = 0; r < BOARD_SIZE; r++) {
+                    for (let c = 0; c < BOARD_SIZE; c++) {
+                        const cell = boardState[r][c];
+                        if (cell !== null) {
+                            const rand = Math.random();
+                            cell.currentObserved = (rand < cell.probBlack) ? 'black' : 'white';
+                            if (cell.currentObserved === 'black') blackObservedCount++;
+                            else whiteObservedCount++;
+                            renderCell(r, c);
+                        }
+                    }
+                }
+
+                logMessage(`観測結果: 黒 ${blackObservedCount} 駒 / 白 ${whiteObservedCount} 駒 に収束`, 'text-slate-300');
+
+                // Step 2: Check 5-in-a-row victory conditions
+                const winResult = checkFiveInARow();
+
+                if (winResult.hasWinner) {
+                    // Winner found!
+                    isGameFinished = true;
+                    isObserving = false;
+                    highlightWinningLine(winResult.winningCells);
+
+                    const winnerName = winResult.winner === 'black' ? '黒' : '白';
+                    const winColorClass = winResult.winner === 'black' ? 'text-amber-400' : 'text-cyan-300';
+
+                    boardMessage.innerHTML = `<span class="font-extrabold text-sm ${winColorClass}">【決着】${winnerName} の5連が完成しました！${winnerName}の勝利！</span>`;
+                    logMessage(`🎉 勝敗決定: ${winnerName}の5連が揃いました！ ${winnerName}の完全勝利！`, 'text-emerald-400 font-bold text-sm');
+
+                    btnObserve.className = 'py-3 px-3 rounded-xl font-extrabold text-xs sm:text-sm tracking-wider uppercase transition-all duration-300 bg-emerald-700 text-white cursor-default border border-emerald-500';
+                    btnObserve.querySelector('span').textContent = `ゲーム終了 - ${winnerName}の勝利！`;
+                    btnSkipObserve.disabled = true;
+                } else {
+                    // No 5-in-a-row matched -> Return to Superposition!
+                    setTimeout(() => {
+                        logMessage('※ 5連が揃わなかったため、すべての駒が確率状態に復元します。', 'text-amber-300/80');
+                        boardMessage.textContent = '5連なし。駒は確率状態へ戻り、相手の手番に移ります。';
+
+                        // Apply decoherence animation & revert
+                        for (let r = 0; r < BOARD_SIZE; r++) {
+                            for (let c = 0; c < BOARD_SIZE; c++) {
+                                const cell = boardState[r][c];
+                                if (cell !== null) {
+                                    cell.currentObserved = null; // Revert state
+                                    const slot = document.getElementById(`slot-${r}-${c}`);
+                                    if (slot) {
+                                        slot.classList.remove('collapsing');
+                                        slot.classList.add('decohering');
+                                    }
+                                    renderCell(r, c);
+                                }
+                            }
+                        }
+
+                        setTimeout(() => {
+                            // Clean up animation classes
+                            for (let r = 0; r < BOARD_SIZE; r++) {
+                                for (let c = 0; c < BOARD_SIZE; c++) {
+                                    const slot = document.getElementById(`slot-${r}-${c}`);
+                                    if (slot) slot.classList.remove('decohering');
+                                }
+                            }
+
+                            advanceTurn();
+
+                        }, 600);
+
+                    }, 1200);
+                }
+
+            }, 600);
+        }
+
+        function checkFiveInARow() {
+            const directions = [
+                { dr: 0, dc: 1 },  // Horizontal
+                { dr: 1, dc: 0 },  // Vertical
+                { dr: 1, dc: 1 },  // Diagonal Down-Right
+                { dr: 1, dc: -1 }  // Diagonal Down-Left
+            ];
+
+            let blackWins = [];
+            let whiteWins = [];
+
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    const current = boardState[r][c]?.currentObserved;
+                    if (!current) continue;
+
+                    for (let d of directions) {
+                        let match = [{ r, c }];
+
+                        for (let step = 1; step < 5; step++) {
+                            const nr = r + d.dr * step;
+                            const nc = c + d.dc * step;
+
+                            if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+                                if (boardState[nr][nc]?.currentObserved === current) {
+                                    match.push({ r: nr, c: nc });
+                                } else {
+                                    break;
+                                }
+                            } else {
+                                break;
+                            }
+                        }
+
+                        if (match.length >= 5) {
+                            if (current === 'black') blackWins.push(match);
+                            else whiteWins.push(match);
+                        }
+                    }
+                }
+            }
+
+            // Priority logic if both form 5-in-a-row (Action player wins)
+            if (blackWins.length > 0 && whiteWins.length > 0) {
+                const winner = currentPlayer; 
+                return { hasWinner: true, winner: winner, winningCells: winner === 'black' ? blackWins[0] : whiteWins[0] };
+            } else if (blackWins.length > 0) {
+                return { hasWinner: true, winner: 'black', winningCells: blackWins[0] };
+            } else if (whiteWins.length > 0) {
+                return { hasWinner: true, winner: 'white', winningCells: whiteWins[0] };
+            }
+
+            return { hasWinner: false, winner: null, winningCells: [] };
+        }
+
+        function highlightWinningLine(winningCells) {
+            winningCells.forEach(cell => {
+                const slot = document.getElementById(`slot-${cell.r}-${cell.c}`);
+                if (slot) {
+                    slot.classList.add('ring-4', 'ring-amber-400', 'ring-offset-2', 'ring-offset-slate-900', 'animate-pulse');
+                }
+            });
+        }
+
+        function handleCpuTurn() {
+            if (isGameFinished || currentPlayer !== 'white' || hasPlacedPieceThisTurn) return;
+
+            let candidates = [];
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    if (boardState[r][c] === null) {
+                        const score = evaluateCandidateCell(r, c);
+                        candidates.push({ r, c, score });
+                    }
+                }
+            }
+
+            candidates.sort((a, b) => b.score - a.score);
+
+            let bestMove = candidates.length > 0 
+                ? candidates[Math.floor(Math.random() * Math.min(3, candidates.length))] 
+                : { r: 6, c: 6 };
+
+            placePiece(bestMove.r, bestMove.c);
+
+            // CPU Observe or Skip Decision
+            setTimeout(() => {
+                if (isGameFinished) return;
+
+                const totalPlaced = boardState.flat().filter(cell => cell !== null).length;
+
+                // CPU observes if white has charges and enough pieces on board or late game
+                if (whiteObsCount > 0 && (totalPlaced >= 6 || whiteObsCount >= 4)) {
+                    performObservation();
+                } else {
+                    skipObservation();
+                }
+            }, 800);
+        }
+
+        function evaluateCandidateCell(r, c) {
+            // Prefer center positions slightly
+            let score = 10 - Math.abs(6 - r) - Math.abs(6 - c);
+
+            // Check adjacent neighbor pieces count
+            for (let dr = -1; dr <= 1; dr++) {
+                for (let dc = -1; dc <= 1; dc++) {
+                    if (dr === 0 && dc === 0) continue;
+                    const nr = r + dr, nc = c + dc;
+                    if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+                        if (boardState[nr][nc] !== null) {
+                            score += 15;
+                        }
+                    }
+                }
+            }
+            return score;
+        }
+
+        function logMessage(text, colorClass = 'text-slate-300') {
+            const entry = document.createElement('div');
+            entry.className = `${colorClass} transition-all duration-200`;
+            const now = new Date();
+            const timeStr = `${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+            entry.innerHTML = `<span class="text-slate-500 font-mono">[${timeStr}]</span> ${text}`;
+            gameLog.appendChild(entry);
+            gameLog.scrollTop = gameLog.scrollHeight;
+        }
+
+        function resetGame() {
+            boardState = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(null));
+            currentPlayer = 'black';
+            turnCount = 1;
+            blackTurnTypeCount = 0;
+            whiteTurnTypeCount = 0;
+            blackObsCount = 5;
+            whiteObsCount = 5;
+            hasPlacedPieceThisTurn = false;
+            pendingPiecePos = null;
+            isGameFinished = false;
+            isObserving = false;
+
+            initBoardUI();
+            gameLog.innerHTML = '<div class="text-slate-500 italic">ゲームがリセットされました。対局を開始します。</div>';
+            boardMessage.textContent = '手番：駒を空きマスに打ってください';
+            updateTurnUI();
+            logMessage('新規ゲームがスタートしました。(観測権: 各5回)', 'text-emerald-400');
+        }
+
+        btnReset.addEventListener('click', resetGame);
+
+        // Mode Switching
+        modePvP.addEventListener('click', () => {
+            if (gameMode === 'PvP') return;
+            gameMode = 'PvP';
+            modePvP.className = 'px-3 py-1 rounded-lg transition font-medium bg-indigo-600 text-white shadow';
+            modePvE.className = 'px-3 py-1 rounded-lg transition font-medium text-slate-400 hover:text-white';
+            resetGame();
+        });
+
+        modePvE.addEventListener('click', () => {
+            if (gameMode === 'PvE') return;
+            gameMode = 'PvE';
+            modePvE.className = 'px-3 py-1 rounded-lg transition font-medium bg-indigo-600 text-white shadow';
+            modePvP.className = 'px-3 py-1 rounded-lg transition font-medium text-slate-400 hover:text-white';
+            resetGame();
+        });
+
+        // Rules Modal Handlers
+        btnRuleModal.addEventListener('click', () => ruleModal.classList.remove('hidden'));
+        btnCloseModal.addEventListener('click', () => ruleModal.classList.add('hidden'));
+        btnGotIt.addEventListener('click', () => ruleModal.classList.add('hidden'));
+        ruleModal.addEventListener('click', (e) => {
+            if (e.target === ruleModal) ruleModal.classList.add('hidden');
+        });
+
+        window.onload = function() {
+            initBoardUI();
+            updateTurnUI();
+        };
+    </script>
+</body>
+</html>

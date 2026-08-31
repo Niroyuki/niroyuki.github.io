@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ヘキサ・プロバビリティ (Hex Probability Arena)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Noto+Sans+JP:wght@400;600;700;900&display=swap');
+        body {
+            font-family: 'Plus Jakarta Sans', 'Noto Sans JP', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+        .hex-pulse {
+            animation: pulse-border 2s infinite;
+        }
+        @keyframes pulse-border {
+            0%, 100% { opacity: 0.4; transform: scale(1); }
+            50% { opacity: 0.9; transform: scale(1.05); }
+        }
+        .dice-roll {
+            animation: roll 0.4s ease-out;
+        }
+        @keyframes roll {
+            0% { transform: rotate(0deg) scale(0.7); }
+            50% { transform: rotate(180deg) scale(1.2); }
+            100% { transform: rotate(360deg) scale(1); }
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between select-none">
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        // Player configurations
+        const PLAYER_CONFIGS = [
+            { id: 0, name: 'プレイヤー1', color: '#ef4444', bgClass: 'bg-red-500', textClass: 'text-red-400', borderClass: 'border-red-500', lightBg: 'bg-red-500/10' },
+            { id: 1, name: 'プレイヤー2', color: '#3b82f6', bgClass: 'bg-blue-500', textClass: 'text-blue-400', borderClass: 'border-blue-500', lightBg: 'bg-blue-500/10' },
+            { id: 2, name: 'プレイヤー3', color: '#10b981', bgClass: 'bg-emerald-500', textClass: 'text-emerald-400', borderClass: 'border-emerald-500', lightBg: 'bg-emerald-500/10' },
+            { id: 3, name: 'プレイヤー4', color: '#f59e0b', bgClass: 'bg-amber-500', textClass: 'text-amber-400', borderClass: 'border-amber-500', lightBg: 'bg-amber-500/10' },
+        ];
+
+        // Snake draft order: A -> B -> C -> D -> D -> C -> B -> A
+        const SETUP_ORDER = [0, 1, 2, 3, 3, 2, 1, 0];
+
+        // Hexagon layout specifications
+        const HEX_RADIUS = 46;
+        const DX = Math.sqrt(3) * HEX_RADIUS; // Horizontal distance (~79.67)
+        const DY = 1.5 * HEX_RADIUS;           // Vertical distance (69.0)
+
+        // Balanced map hex definition
+        const HEX_DATA = [
+            // Row 0 (3 hexes)
+            { id: 0, num: 12, pt: 4, row: 0, col: 0, x: -DX, y: -2 * DY },
+            { id: 1, num: 5,  pt: 2, row: 0, col: 1, x: 0,   y: -2 * DY },
+            { id: 2, num: 3,  pt: 3, row: 0, col: 2, x: DX,  y: -2 * DY },
+            // Row 1 (4 hexes)
+            { id: 3, num: 8,  pt: 1, row: 1, col: 0, x: -1.5 * DX, y: -DY },
+            { id: 4, num: 10, pt: 2, row: 1, col: 1, x: -0.5 * DX, y: -DY },
+            { id: 5, num: 6,  pt: 1, row: 1, col: 2, x: 0.5 * DX,  y: -DY },
+            { id: 6, num: 9,  pt: 2, row: 1, col: 3, x: 1.5 * DX,  y: -DY },
+            // Row 2 (5 hexes)
+            { id: 7, num: 11, pt: 3,  row: 2, col: 0, x: -2 * DX, y: 0 },
+            { id: 8, num: 4,  pt: 2,  row: 2, col: 1, x: -DX,     y: 0 },
+            { id: 9, num: 7,  pt: -1, row: 2, col: 2, x: 0,       y: 0 }, // Center Penalty Avoidance Zone
+            { id: 10, num: 5, pt: 2,  row: 2, col: 3, x: DX,      y: 0 },
+            { id: 11, num: 2, pt: 4,  row: 2, col: 4, x: 2 * DX,  y: 0 },
+            // Row 3 (4 hexes)
+            { id: 12, num: 9, pt: 2, row: 3, col: 0, x: -1.5 * DX, y: DY },
+            { id: 13, num: 6, pt: 1, row: 3, col: 1, x: -0.5 * DX, y: DY },
+            { id: 14, num: 4, pt: 2, row: 3, col: 2, x: 0.5 * DX,  y: DY },
+            { id: 15, num: 8, pt: 1, row: 3, col: 3, x: 1.5 * DX,  y: DY },
+            // Row 4 (3 hexes)
+            { id: 16, num: 3,  pt: 3, row: 4, col: 0, x: -DX, y: 2 * DY },
+            { id: 17, num: 10, pt: 2, row: 4, col: 1, x: 0,   y: 2 * DY },
+            { id: 18, num: 11, pt: 3, row: 4, col: 2, x: DX,  y: 2 * DY },
+        ];
+
+        // Sound synthesizer using Web Audio API
+        const playSound = (type) => {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const now = ctx.currentTime;
+                
+                if (type === 'dice') {
+                    for (let i = 0; i < 4; i++) {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(120 + Math.random() * 200, now + i * 0.08);
+                        gain.gain.setValueAtTime(0.15, now + i * 0.08);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.08 + 0.06);
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start(now + i * 0.08);
+                        osc.stop(now + i * 0.08 + 0.06);
+                    }
+                } else if (type === 'score') {
+                    const freqs = [523.25, 659.25, 783.99]; // C5, E5, G5
+                    freqs.forEach((f, idx) => {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.frequency.setValueAtTime(f, now + idx * 0.07);
+                        gain.gain.setValueAtTime(0.2, now + idx * 0.07);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.07 + 0.2);
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start(now + idx * 0.07);
+                        osc.stop(now + idx * 0.07 + 0.2);
+                    });
+                } else if (type === 'penalty') {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(180, now);
+                    osc.frequency.linearRampToValueAtTime(110, now + 0.25);
+                    gain.gain.setValueAtTime(0.25, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.25);
+                } else if (type === 'place') {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.frequency.setValueAtTime(440, now);
+                    osc.frequency.exponentialRampToValueAtTime(880, now + 0.1);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.1);
+                }
+            } catch (e) {
+                // AudioContext silent fallback
+            }
+        };
+
+        function App() {
+            // Game State
+            const [gameStage, setGameStage] = useState('menu'); // 'menu', 'setup', 'playing', 'result'
+            const [showResultModal, setShowResultModal] = useState(true);
+            const [humanCount, setHumanCount] = useState(1);     // 1 to 4 human players
+            const [aiSpeed, setAiSpeed] = useState('normal');    // 'fast', 'normal', 'slow'
+
+            // Placement setup
+            const [setupStep, setSetupStep] = useState(0);       // Index in SETUP_ORDER
+            
+            // Playing state
+            const [currentTurnPlayer, setCurrentTurnPlayer] = useState(0);
+            const [round, setRound] = useState(1);               // 1 to 10
+            const [dice, setDice] = useState([1, 1]);
+            const [isRolling, setIsRolling] = useState(false);
+            const [highlightHexes, setHighlightHexes] = useState([]);
+            
+            // Dice History & Tab view state
+            const [diceHistory, setDiceHistory] = useState([]);  // Array of { d1, d2, total, pId, round }
+            const [rightPanelTab, setRightPanelTab] = useState('logs'); // 'logs' | 'stats'
+            
+            // Map Vertices & Placement
+            const [vertices, setVertices] = useState([]);
+            const [placedMarkers, setPlacedMarkers] = useState({}); // vertexId -> playerId
+
+            // Scores & Stats
+            const [scores, setScores] = useState([0, 0, 0, 0]);
+            const [logs, setLogs] = useState([]);
+
+            // AI Speed delay map
+            const speedDelays = { fast: 400, normal: 900, slow: 1500 };
+
+            // Generate map vertices and cluster them
+            useEffect(() => {
+                const vertexList = [];
+                const precision = 3;
+
+                HEX_DATA.forEach((hex) => {
+                    // Pointy-topped hexagon angles: -90, -30, 30, 90, 150, 210 degrees
+                    for (let i = 0; i < 6; i++) {
+                        const angleDeg = -90 + i * 60;
+                        const angleRad = (Math.PI / 180) * angleDeg;
+                        const vx = Math.round((hex.x + HEX_RADIUS * Math.cos(angleRad)) * 10) / 10;
+                        const vy = Math.round((hex.y + HEX_RADIUS * Math.sin(angleRad)) * 10) / 10;
+
+                        // Check if vertex exists nearby
+                        let existing = vertexList.find(v => Math.hypot(v.x - vx, v.y - vy) < precision);
+                        if (existing) {
+                            if (!existing.adjHexes.includes(hex.id)) {
+                                existing.adjHexes.push(hex.id);
+                            }
+                        } else {
+                            vertexList.push({
+                                id: vertexList.length,
+                                x: vx,
+                                y: vy,
+                                adjHexes: [hex.id]
+                            });
+                        }
+                    }
+                });
+                setVertices(vertexList);
+            }, []);
+
+            // Helper: calculate expected points for a vertex
+            const getVertexValue = (vertex) => {
+                let expectedPt = 0;
+                let touchesSeven = false;
+
+                vertex.adjHexes.forEach(hId => {
+                    const hex = HEX_DATA[hId];
+                    if (hex.num === 7) {
+                        touchesSeven = true;
+                    } else {
+                        // 2D6 probability
+                        const pips = 6 - Math.abs(7 - hex.num);
+                        expectedPt += (pips / 36) * hex.pt;
+                    }
+                });
+                return { expectedPt, touchesSeven };
+            };
+
+            // Start New Game
+            const handleStartGame = () => {
+                setGameStage('setup');
+                setShowResultModal(true);
+                setSetupStep(0);
+                setPlacedMarkers({});
+                setScores([0, 0, 0, 0]);
+                setDiceHistory([]);
+                setLogs([{ text: '🎮 ゲーム開始！マーカーを交互に設置してください。', time: new Date().toLocaleTimeString() }]);
+                setRound(1);
+                setCurrentTurnPlayer(0);
+                playSound('place');
+            };
+
+            // AI Placement Handler
+            useEffect(() => {
+                if (gameStage !== 'setup') return;
+
+                const activePlayer = SETUP_ORDER[setupStep];
+                const isHuman = activePlayer < humanCount;
+
+                if (!isHuman) {
+                    const timer = setTimeout(() => {
+                        // AI Decision Making
+                        const availableVertices = vertices.filter(v => placedMarkers[v.id] === undefined);
+                        if (availableVertices.length === 0) return;
+
+                        // Check if AI already has a marker touching hex 7
+                        const myPlacedVertices = Object.keys(placedMarkers)
+                            .filter(vid => placedMarkers[vid] === activePlayer)
+                            .map(vid => vertices.find(v => v.id === parseInt(vid)));
+                        
+                        const alreadyHasSeven = myPlacedVertices.some(v => v && v.adjHexes.some(hId => HEX_DATA[hId].num === 7));
+
+                        let bestVertex = null;
+                        let bestScore = -999;
+
+                        availableVertices.forEach(v => {
+                            const { expectedPt, touchesSeven } = getVertexValue(v);
+                            let score = expectedPt * 100;
+
+                            // High bonus for touching 7 if not already touching it
+                            if (touchesSeven && !alreadyHasSeven) {
+                                score += 35; // Value of avoiding penalty
+                            } else if (touchesSeven && alreadyHasSeven) {
+                                score -= 10; // Avoid redundant 7 coverage if other spots are better
+                            }
+
+                            // Slight random variance for natural feel
+                            score += Math.random() * 5;
+
+                            if (score > bestScore) {
+                                bestScore = score;
+                                bestVertex = v;
+                            }
+                        });
+
+                        if (bestVertex) {
+                            placeMarker(bestVertex.id, activePlayer);
+                        }
+                    }, speedDelays[aiSpeed]);
+
+                    return () => clearTimeout(timer);
+                }
+            }, [gameStage, setupStep, placedMarkers, humanCount, aiSpeed, vertices]);
+
+            // Place Marker
+            const placeMarker = (vertexId, pId) => {
+                if (placedMarkers[vertexId] !== undefined) return;
+
+                const nextMarkers = { ...placedMarkers, [vertexId]: pId };
+                setPlacedMarkers(nextMarkers);
+                playSound('place');
+
+                const pName = PLAYER_CONFIGS[pId].name;
+                addLog(`📍 ${pName} がマーカーを配置しました。`);
+
+                if (setupStep + 1 < SETUP_ORDER.length) {
+                    setSetupStep(setupStep + 1);
+                } else {
+                    // Setup Complete! Transition to Playing
+                    setGameStage('playing');
+                    setCurrentTurnPlayer(0);
+                    addLog('⚔️ マーカー配置完了！ターン 1 が始まります。');
+                }
+            };
+
+            // AI Dice Roll Handler
+            useEffect(() => {
+                if (gameStage !== 'playing' || isRolling) return;
+
+                const isHuman = currentTurnPlayer < humanCount;
+                if (!isHuman) {
+                    const timer = setTimeout(() => {
+                        handleRollDice();
+                    }, speedDelays[aiSpeed]);
+
+                    return () => clearTimeout(timer);
+                }
+            }, [gameStage, currentTurnPlayer, isRolling, humanCount, aiSpeed]);
+
+            // Roll Dice Action
+            const handleRollDice = () => {
+                if (isRolling) return;
+
+                setIsRolling(true);
+                playSound('dice');
+
+                // Animate rolling dice
+                let rollCount = 0;
+                const interval = setInterval(() => {
+                    const d1 = Math.floor(Math.random() * 6) + 1;
+                    const d2 = Math.floor(Math.random() * 6) + 1;
+                    setDice([d1, d2]);
+                    rollCount++;
+
+                    if (rollCount >= 10) {
+                        clearInterval(interval);
+                        // Final dice result
+                        const finalD1 = Math.floor(Math.random() * 6) + 1;
+                        const finalD2 = Math.floor(Math.random() * 6) + 1;
+                        const total = finalD1 + finalD2;
+                        setDice([finalD1, finalD2]);
+                        setIsRolling(false);
+
+                        // Process Outcome
+                        processDiceResult(total, currentTurnPlayer, finalD1, finalD2);
+                    }
+                }, 40);
+            };
+
+            // Calculate points / penalty after dice roll
+            const processDiceResult = (total, rollingPlayer, d1, d2) => {
+                const activePlayerName = PLAYER_CONFIGS[rollingPlayer].name;
+                const matchingHexes = HEX_DATA.filter(h => h.num === total);
+                setHighlightHexes(matchingHexes.map(h => h.id));
+
+                // Record dice history
+                setDiceHistory(prev => [...prev, { d1, d2, total, pId: rollingPlayer, round }]);
+
+                let newScores = [...scores];
+                let logMessages = [];
+
+                if (total === 7) {
+                    // Penalty Handling
+                    playSound('penalty');
+                    logMessages.push(`🎲 ${activePlayerName} が 【7】 を出しました！`);
+
+                    // Check which players touch Hex 7
+                    const hex7Id = HEX_DATA.find(h => h.num === 7).id;
+                    const safePlayers = new Set();
+
+                    Object.entries(placedMarkers).forEach(([vid, pId]) => {
+                        const vertex = vertices.find(v => v.id === parseInt(vid));
+                        if (vertex && vertex.adjHexes.includes(hex7Id)) {
+                            safePlayers.add(pId);
+                        }
+                    });
+
+                    // Apply -1pt penalty to non-safe players (floor at 0 pt)
+                    PLAYER_CONFIGS.forEach(p => {
+                        if (safePlayers.has(p.id)) {
+                            logMessages.push(` 🛡️ ${p.name}: 減点回避！`);
+                        } else {
+                            if (newScores[p.id] > 0) {
+                                newScores[p.id] -= 1;
+                                logMessages.push(` ⚠️ ${p.name}: -1 pt (7未回避)`);
+                            } else {
+                                logMessages.push(` 🛡️ ${p.name}: 0ptのため減点なし`);
+                            }
+                        }
+                    });
+
+                } else {
+                    // Score Gain Handling
+                    playSound('score');
+                    let scoreGainedThisRoll = false;
+
+                    // Evaluate points earned per player marker
+                    Object.entries(placedMarkers).forEach(([vid, pId]) => {
+                        const vertex = vertices.find(v => v.id === parseInt(vid));
+                        if (!vertex) return;
+
+                        vertex.adjHexes.forEach(hId => {
+                            const hex = HEX_DATA[hId];
+                            if (hex.num === total) {
+                                newScores[pId] += hex.pt;
+                                scoreGainedThisRoll = true;
+                                logMessages.push(` 🎯 ${PLAYER_CONFIGS[pId].name} +${hex.pt}pt (${hex.num}のマス)`);
+                            }
+                        });
+                    });
+
+                    if (!scoreGainedThisRoll) {
+                        logMessages.push(`🎲 ${activePlayerName} が 【${total}】 を出しましたが、対象マスのマーカーはありませんでした。`);
+                    } else {
+                        logMessages.unshift(`🎲 ${activePlayerName} が 【${total}】 を出しました！`);
+                    }
+                }
+
+                setScores(newScores);
+                addLog(logMessages.join('\n'));
+
+                // Advance Turn or End Game
+                setTimeout(() => {
+                    setHighlightHexes([]);
+                    if (currentTurnPlayer === 3) {
+                        if (round >= 10) {
+                            // Game Over
+                            setGameStage('result');
+                            setShowResultModal(true);
+                            addLog('🎉 10ターン終了！ゲーム終了です。');
+                        } else {
+                            setRound(round + 1);
+                            setCurrentTurnPlayer(0);
+                        }
+                    } else {
+                        setCurrentTurnPlayer(currentTurnPlayer + 1);
+                    }
+                }, 1000);
+            };
+
+            const addLog = (msg) => {
+                setLogs(prev => [{ text: msg, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) }, ...prev]);
+            };
+
+            // SVG Hexagon Tile Component
+            const HexTile = ({ hex, isHighlighted }) => {
+                // Polygon points calculation
+                const points = Array.from({ length: 6 }).map((_, i) => {
+                    const angleRad = (Math.PI / 180) * (-90 + i * 60);
+                    return `${hex.x + HEX_RADIUS * Math.cos(angleRad)},${hex.y + HEX_RADIUS * Math.sin(angleRad)}`;
+                }).join(' ');
+
+                const isSeven = hex.num === 7;
+                
+                // Color schemes based on points & penalty
+                let fillColor = '#1e293b';
+                let strokeColor = '#334155';
+                let textColor = '#f8fafc';
+
+                if (isSeven) {
+                    fillColor = 'url(#grad-seven)';
+                    strokeColor = '#ef4444';
+                    textColor = '#fca5a5';
+                } else if (hex.pt === 4) {
+                    fillColor = 'url(#grad-gold)';
+                    strokeColor = '#f59e0b';
+                } else if (hex.pt === 3) {
+                    fillColor = 'url(#grad-purple)';
+                    strokeColor = '#a855f7';
+                } else if (hex.pt === 2) {
+                    fillColor = '#334155';
+                    strokeColor = '#475569';
+                }
+
+                return (
+                    <g className="transition-all duration-300">
+                        <polygon
+                            points={points}
+                            fill={fillColor}
+                            stroke={isHighlighted ? '#fbbf24' : strokeColor}
+                            strokeWidth={isHighlighted ? 4 : 2}
+                            className={`transition-all ${isHighlighted ? 'filter drop-shadow-[0_0_12px_rgba(251,191,36,0.8)]' : ''}`}
+                        />
+                        {/* Hex Number Badge */}
+                        <circle
+                            cx={hex.x}
+                            cy={hex.y - 5}
+                            r={17}
+                            fill="#0f172a"
+                            stroke={isSeven ? '#ef4444' : '#475569'}
+                            strokeWidth={1.5}
+                        />
+                        <text
+                            x={hex.x}
+                            y={hex.y - 0.5}
+                            textAnchor="middle"
+                            dominantBaseline="central"
+                            fill={textColor}
+                            className="font-extrabold text-[15px]"
+                        >
+                            {hex.num}
+                        </text>
+                        {/* Points Text */}
+                        <text
+                            x={hex.x}
+                            y={hex.y + 21}
+                            textAnchor="middle"
+                            fill={isSeven ? '#f87171' : '#cbd5e1'}
+                            className="text-[11px] font-bold"
+                        >
+                            {isSeven ? '減点回避' : `${hex.pt}pt`}
+                        </text>
+                    </g>
+                );
+            };
+
+            // Vertex Node Component (Interactive / Placed)
+            const VertexNode = ({ vertex }) => {
+                const placedPlayerId = placedMarkers[vertex.id];
+                const isOccupied = placedPlayerId !== undefined;
+                
+                const activeSetupPlayer = SETUP_ORDER[setupStep];
+                const isHumanTurn = gameStage === 'setup' && activeSetupPlayer < humanCount;
+                const canClick = gameStage === 'setup' && isHumanTurn && !isOccupied;
+
+                const playerConfig = isOccupied ? PLAYER_CONFIGS[placedPlayerId] : null;
+
+                // Check if vertex touches Hex 7 (Shield status)
+                const touchesSeven = vertex.adjHexes.some(hId => HEX_DATA[hId].num === 7);
+
+                return (
+                    <g
+                        transform={`translate(${vertex.x}, ${vertex.y})`}
+                        onClick={() => canClick && placeMarker(vertex.id, activeSetupPlayer)}
+                        className={canClick ? 'cursor-pointer group' : ''}
+                    >
+                        {/* Hover ring for interactive placement */}
+                        {canClick && (
+                            <circle
+                                r={14}
+                                fill={PLAYER_CONFIGS[activeSetupPlayer].color}
+                                className="opacity-40 group-hover:opacity-80 animate-ping transition-opacity"
+                            />
+                        )}
+
+                        {/* Unoccupied clickable node */}
+                        {!isOccupied && canClick && (
+                            <circle
+                                r={9}
+                                fill="#0f172a"
+                                stroke={PLAYER_CONFIGS[activeSetupPlayer].color}
+                                strokeWidth={2.5}
+                                className="group-hover:scale-125 transition-transform"
+                            />
+                        )}
+
+                        {/* Placed Player Marker */}
+                        {isOccupied && (
+                            <g className="transition-all duration-300">
+                                {/* Shield Glow Effect if touching 7 */}
+                                {touchesSeven && (
+                                    <circle
+                                        r={14}
+                                        fill="none"
+                                        stroke="#ef4444"
+                                        strokeWidth={1.5}
+                                        strokeDasharray="3 2"
+                                        className="animate-spin"
+                                        style={{ animationDuration: '6s' }}
+                                    />
+                                )}
+                                <circle
+                                    r={10}
+                                    fill={playerConfig.color}
+                                    stroke="#ffffff"
+                                    strokeWidth={2}
+                                    className="filter drop-shadow-md"
+                                />
+                                <text
+                                    y={0.5}
+                                    textAnchor="middle"
+                                    dominantBaseline="central"
+                                    fill="#ffffff"
+                                    className="text-[9px] font-black pointer-events-none"
+                                >
+                                    P{placedPlayerId + 1}
+                                </text>
+                            </g>
+                        )}
+                    </g>
+                );
+            };
+
+            return (
+                <div className="max-w-7xl mx-auto p-3 md:p-6 w-full flex flex-col min-h-screen">
+                    
+                    {/* Header */}
+                    <header className="flex flex-col md:flex-row md:items-center justify-between pb-4 mb-4 border-b border-slate-800 gap-3">
+                        <div>
+                            <h1 className="text-2xl md:text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-amber-400 via-orange-400 to-red-500">
+                                ヘキサ・プロバビリティ
+                            </h1>
+                            <p className="text-xs text-slate-400">リスク管理ボードゲーム</p>
+                        </div>
+
+                        {/* Game Status Header info */}
+                        {gameStage !== 'menu' && (
+                            <div className="flex items-center gap-3 bg-slate-800/80 px-4 py-2 rounded-xl border border-slate-700/60">
+                                <div className="text-center">
+                                    <span className="text-[10px] text-slate-400 block uppercase">ラウンド</span>
+                                    <span className="text-base font-extrabold text-amber-400">{round} / 10</span>
+                                </div>
+                                <div className="h-6 w-px bg-slate-700" />
+                                <div className="text-center">
+                                    <span className="text-[10px] text-slate-400 block uppercase">フェーズ</span>
+                                    <span className="text-sm font-bold text-slate-200">
+                                        {gameStage === 'setup' ? 'マーカー配置' : gameStage === 'playing' ? '対局中' : '結果発表'}
+                                    </span>
+                                </div>
+                                {gameStage === 'result' && !showResultModal && (
+                                    <button
+                                        onClick={() => setShowResultModal(true)}
+                                        className="ml-2 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg transition-all shadow-md shadow-amber-500/20"
+                                    >
+                                        🏆 結果 & 統計を表示
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </header>
+
+                    {/* MENU STAGE */}
+                    {gameStage === 'menu' && (
+                        <div className="flex-1 flex flex-col items-center justify-center py-8">
+                            <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-6 md:p-8 max-w-lg w-full text-center shadow-2xl space-y-6">
+                                <div className="inline-block p-4 bg-amber-500/10 rounded-full text-amber-400 mb-2">
+                                    🎲
+                                </div>
+                                <h2 className="text-2xl font-black text-slate-100">対戦設定</h2>
+                                
+                                <div className="space-y-4 text-left">
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-300 block mb-2">人間プレイヤー人数</label>
+                                        <div className="grid grid-cols-4 gap-2">
+                                            {[1, 2, 3, 4].map(num => (
+                                                <button
+                                                    key={num}
+                                                    onClick={() => setHumanCount(num)}
+                                                    className={`py-2 rounded-lg font-bold text-sm border transition-all ${
+                                                        humanCount === num
+                                                            ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-lg shadow-amber-500/20'
+                                                            : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500'
+                                                    }`}
+                                                >
+                                                    {num}人 {num < 4 && <span className="text-[10px] block opacity-75">+{4-num}CPU</span>}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-300 block mb-2">CPU速度</label>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {[
+                                                { id: 'fast', label: 'サクサク' },
+                                                { id: 'normal', label: 'ふつう' },
+                                                { id: 'slow', label: 'じっくり' }
+                                            ].map(sp => (
+                                                <button
+                                                    key={sp.id}
+                                                    onClick={() => setAiSpeed(sp.id)}
+                                                    className={`py-2 rounded-lg font-bold text-xs border transition-all ${
+                                                        aiSpeed === sp.id
+                                                            ? 'bg-indigo-600 text-white border-indigo-500'
+                                                            : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500'
+                                                    }`}
+                                                >
+                                                    {sp.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Rule Summary */}
+                                    <div className="bg-slate-900/80 p-4 rounded-xl text-xs text-slate-300 space-y-2 border border-slate-800">
+                                        <div className="font-bold text-amber-400 mb-1">基本ルール概要:</div>
+                                        <p>• 順番にマーカーを2つずつ頂点に配置します。</p>
+                                        <p>• ダイス2個の合計値のマスに接しているとポイント獲得。</p>
+                                        <p>• 【7】が出た時、7のマスに接していない人は <span className="text-red-400 font-bold">-1pt 減点</span>！</p>
+                                        <p>• 10ターン（計40ロール）終了時に最もポイントが高い人の勝ち。</p>
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={handleStartGame}
+                                    className="w-full py-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-lg rounded-xl shadow-lg shadow-orange-500/20 transform active:scale-95 transition-all"
+                                >
+                                    ゲームスタート！
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* PLAYING / SETUP / RESULT STAGE */}
+                    {gameStage !== 'menu' && (
+                        <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                            
+                            {/* Left Column: Board SVG */}
+                            <div className="lg:col-span-7 bg-slate-900/60 border border-slate-800 rounded-2xl p-2 md:p-4 flex flex-col items-center justify-center relative overflow-hidden shadow-xl">
+                                
+                                {/* Setup Indicator Banner */}
+                                {gameStage === 'setup' && (
+                                    <div className="w-full mb-2 bg-slate-800/90 border border-slate-700 rounded-xl p-3 flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <div className={`w-3 h-3 rounded-full ${PLAYER_CONFIGS[SETUP_ORDER[setupStep]].bgClass}`} />
+                                            <span className="text-sm font-bold">
+                                                {PLAYER_CONFIGS[SETUP_ORDER[setupStep]].name} のマーカー配置 ({Math.floor(setupStep/4)+1}/2個目)
+                                            </span>
+                                        </div>
+                                        <span className="text-xs text-slate-400">
+                                            {SETUP_ORDER[setupStep] < humanCount ? '頂点を選択してください' : 'CPU思考中...'}
+                                        </span>
+                                    </div>
+                                )}
+
+                                {/* SVG Map Renderer */}
+                                <svg
+                                    viewBox="-210 -190 420 380"
+                                    className="w-full h-auto max-h-[580px] select-none"
+                                >
+                                    <defs>
+                                        <linearGradient id="grad-gold" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" stopColor="#451a03" />
+                                            <stop offset="100%" stopColor="#78350f" />
+                                        </linearGradient>
+                                        <linearGradient id="grad-purple" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" stopColor="#3b0764" />
+                                            <stop offset="100%" stopColor="#581c87" />
+                                        </linearGradient>
+                                        <linearGradient id="grad-seven" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" stopColor="#450a0a" />
+                                            <stop offset="100%" stopColor="#7f1d1d" />
+                                        </linearGradient>
+                                    </defs>
+
+                                    {/* Hexagon Tiles */}
+                                    {HEX_DATA.map(hex => (
+                                        <HexTile
+                                            key={hex.id}
+                                            hex={hex}
+                                            isHighlighted={highlightHexes.includes(hex.id)}
+                                        />
+                                    ))}
+
+                                    {/* Vertices & Markers */}
+                                    {vertices.map(vertex => (
+                                        <VertexNode
+                                            key={vertex.id}
+                                            vertex={vertex}
+                                        />
+                                    ))}
+                                </svg>
+                            </div>
+
+                            {/* Right Column: Scoreboard, Controls & Logs */}
+                            <div className="lg:col-span-5 space-y-4">
+                                
+                                {/* Dice Roll Controller Card */}
+                                {gameStage === 'playing' && (
+                                    <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-5 shadow-lg flex items-center justify-between">
+                                        <div className="flex items-center gap-4">
+                                            {/* Dice 1 */}
+                                            <div className={`w-12 h-12 bg-slate-100 text-slate-900 rounded-xl font-black text-2xl flex items-center justify-center shadow-inner ${isRolling ? 'dice-roll' : ''}`}>
+                                                {dice[0]}
+                                            </div>
+                                            {/* Dice 2 */}
+                                            <div className={`w-12 h-12 bg-slate-100 text-slate-900 rounded-xl font-black text-2xl flex items-center justify-center shadow-inner ${isRolling ? 'dice-roll' : ''}`}>
+                                                {dice[1]}
+                                            </div>
+                                            <div>
+                                                <span className="text-[10px] text-slate-400 block font-bold">合計出目</span>
+                                                <span className="text-2xl font-black text-amber-400">{dice[0] + dice[1]}</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Action Button */}
+                                        <button
+                                            onClick={handleRollDice}
+                                            disabled={isRolling || currentTurnPlayer >= humanCount}
+                                            className={`px-5 py-3 rounded-xl font-black text-sm transition-all shadow-md ${
+                                                currentTurnPlayer < humanCount
+                                                    ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 active:scale-95 shadow-amber-500/20'
+                                                    : 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                                            }`}
+                                        >
+                                            {currentTurnPlayer < humanCount ? 'サイコロを振る' : 'CPU手番中...'}
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Scoreboard */}
+                                <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-4 shadow-lg space-y-3">
+                                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">プレイヤー・スコアボード</h3>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2">
+                                        {PLAYER_CONFIGS.map((p) => {
+                                            const isTurn = gameStage === 'playing' && currentTurnPlayer === p.id;
+                                            const isHuman = p.id < humanCount;
+                                            
+                                            // Check 7-shield coverage
+                                            const hex7Id = HEX_DATA.find(h => h.num === 7).id;
+                                            const hasSevenShield = Object.entries(placedMarkers).some(([vid, ownerId]) => {
+                                                if (ownerId !== p.id) return false;
+                                                const v = vertices.find(v => v.id === parseInt(vid));
+                                                return v && v.adjHexes.includes(hex7Id);
+                                            });
+
+                                            return (
+                                                <div
+                                                    key={p.id}
+                                                    className={`p-3 rounded-xl border transition-all flex items-center justify-between ${
+                                                        isTurn
+                                                            ? `${p.lightBg} ${p.borderClass} shadow-md`
+                                                            : 'bg-slate-900/60 border-slate-800'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-3 h-8 rounded-full ${p.bgClass}`} />
+                                                        <div>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-extrabold text-sm text-slate-200">{p.name}</span>
+                                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-bold">
+                                                                    {isHuman ? 'YOU' : 'CPU'}
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
+                                                                {hasSevenShield ? (
+                                                                    <span className="text-emerald-400 flex items-center gap-0.5 font-bold text-[11px]">
+                                                                        🛡️ 7回避可
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-red-400 font-bold text-[11px]">
+                                                                        ⚠️ 7無防備
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="text-right">
+                                                        <span className="text-2xl font-black text-slate-100">{scores[p.id]}</span>
+                                                        <span className="text-xs text-slate-400 font-bold ml-1">pt</span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Tabbed Panel: Logs / Dice Analytics */}
+                                <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 shadow-lg flex flex-col h-80">
+                                    {/* Tab Headers */}
+                                    <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => setRightPanelTab('logs')}
+                                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                                    rightPanelTab === 'logs'
+                                                        ? 'bg-slate-800 text-amber-400 border border-slate-700'
+                                                        : 'text-slate-400 hover:text-slate-200'
+                                                }`}
+                                            >
+                                                📜 対局ログ
+                                            </button>
+                                            <button
+                                                onClick={() => setRightPanelTab('stats')}
+                                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                                    rightPanelTab === 'stats'
+                                                        ? 'bg-slate-800 text-amber-400 border border-slate-700'
+                                                        : 'text-slate-400 hover:text-slate-200'
+                                                }`}
+                                            >
+                                                🎲 出目統計・履歴
+                                                {diceHistory.length > 0 && (
+                                                    <span className="bg-amber-500/20 text-amber-400 text-[10px] px-1.5 py-0.2 rounded-full font-black">
+                                                        {diceHistory.length}
+                                                    </span>
+                                                )}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* LOGS TAB CONTENT */}
+                                    {rightPanelTab === 'logs' && (
+                                        <div className="flex-1 overflow-y-auto space-y-2 pr-1 text-xs">
+                                            {logs.map((log, idx) => (
+                                                <div key={idx} className="bg-slate-800/40 p-2 rounded-lg border border-slate-800/60">
+                                                    <span className="text-[10px] text-slate-500 block">{log.time}</span>
+                                                    <p className="text-slate-300 font-medium whitespace-pre-line leading-relaxed">{log.text}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* STATS / DICE ANALYTICS TAB CONTENT */}
+                                    {rightPanelTab === 'stats' && (
+                                        <div className="flex-1 overflow-y-auto space-y-4 pr-1 text-xs">
+                                            {/* Section 1: Dice History List (10 turns x 4 players = 40 rolls max) */}
+                                            <div>
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <span className="text-[11px] font-bold text-slate-400 uppercase">出目履歴 ({diceHistory.length}/40)</span>
+                                                </div>
+                                                {diceHistory.length === 0 ? (
+                                                    <p className="text-slate-500 text-[11px] italic">まだサイコロが振られていません</p>
+                                                ) : (
+                                                    <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2 bg-slate-950/60 rounded-xl border border-slate-800">
+                                                        {diceHistory.map((item, idx) => {
+                                                            const diceGlyphs = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+                                                            const player = PLAYER_CONFIGS[item.pId];
+                                                            const isSeven = item.total === 7;
+
+                                                            return (
+                                                                <div
+                                                                    key={idx}
+                                                                    className={`px-2 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 border ${
+                                                                        isSeven
+                                                                            ? 'bg-red-950/40 border-red-800 text-red-300'
+                                                                            : 'bg-slate-800/80 border-slate-700 text-slate-200'
+                                                                    }`}
+                                                                >
+                                                                    <span className="text-[9px] text-slate-400">R{item.round}</span>
+                                                                    <span className="text-base leading-none">
+                                                                        {diceGlyphs[item.d1]}{diceGlyphs[item.d2]}
+                                                                    </span>
+                                                                    <span className={`font-black ${isSeven ? 'text-red-400' : 'text-amber-400'}`}>
+                                                                        {item.total}
+                                                                    </span>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Section 2: Frequency Histogram (Sums 2-12) */}
+                                            <div>
+                                                <span className="text-[11px] font-bold text-slate-400 uppercase block mb-2">
+                                                    出目出現頻度ヒストグラム (2〜12)
+                                                </span>
+                                                <div className="space-y-1.5">
+                                                    {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => {
+                                                        const count = diceHistory.filter(h => h.total === num).length;
+                                                        const totalRolls = diceHistory.length || 1;
+                                                        const maxCount = Math.max(...[2,3,4,5,6,7,8,9,10,11,12].map(n => diceHistory.filter(h => h.total === n).length), 1);
+                                                        const barPercent = Math.min(100, Math.round((count / maxCount) * 100));
+                                                        
+                                                        const isSeven = num === 7;
+                                                        const isExtreme = num === 2 || num === 12;
+
+                                                        return (
+                                                            <div key={num} className="relative bg-slate-950/70 border border-slate-800 rounded-lg overflow-hidden h-7 flex items-center px-2">
+                                                                {/* Histogram Background Bar */}
+                                                                <div
+                                                                    className={`absolute left-0 top-0 bottom-0 transition-all duration-500 rounded-r ${
+                                                                        isSeven
+                                                                            ? 'bg-gradient-to-r from-red-900/60 to-red-600/60'
+                                                                            : isExtreme
+                                                                            ? 'bg-gradient-to-r from-amber-900/60 to-amber-600/60'
+                                                                            : 'bg-gradient-to-r from-indigo-900/60 to-blue-600/60'
+                                                                    }`}
+                                                                    style={{ width: `${count > 0 ? Math.max(barPercent, 6) : 0}%` }}
+                                                                />
+
+                                                                {/* Content Overlay */}
+                                                                <div className="relative z-10 w-full flex items-center justify-between text-xs font-bold">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black ${
+                                                                            isSeven ? 'bg-red-500/20 text-red-400 border border-red-500/50' : 'bg-slate-800 text-slate-200'
+                                                                        }`}>
+                                                                            {num}
+                                                                        </span>
+                                                                        <span className="text-slate-300 font-mono text-[11px]">
+                                                                            {count}回
+                                                                        </span>
+                                                                    </div>
+                                                                    <span className="text-[10px] text-slate-400 font-mono">
+                                                                        {((count / totalRolls) * 100).toFixed(1)}%
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                </div>
+
+                            </div>
+                        </div>
+                    )}
+
+                    {/* RESULT MODAL */}
+                    {gameStage === 'result' && showResultModal && (
+                        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+                            <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 md:p-8 max-w-3xl w-full shadow-2xl space-y-6 my-8">
+                                <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-3 bg-amber-500/10 rounded-full text-amber-400 text-2xl">
+                                            🏆
+                                        </div>
+                                        <div className="text-left">
+                                            <h2 className="text-2xl font-black text-slate-100">対局終了！最終結果 & 出目統計</h2>
+                                            <p className="text-xs text-slate-400">全10ターン（計40ロール）の対局結果と確率データ分析</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowResultModal(false)}
+                                        className="text-slate-400 hover:text-slate-200 text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 font-bold transition-all"
+                                    >
+                                        盤面を見る ↗
+                                    </button>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+                                    {/* Left: Final Ranking */}
+                                    <div className="space-y-3">
+                                        <h3 className="text-xs font-extrabold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                                            <span>🏆</span> 最終スコアランキング
+                                        </h3>
+                                        <div className="space-y-2">
+                                            {PLAYER_CONFIGS
+                                                .map(p => ({ ...p, score: scores[p.id] }))
+                                                .sort((a, b) => b.score - a.score)
+                                                .map((p, rank) => (
+                                                    <div
+                                                        key={p.id}
+                                                        className={`p-3 rounded-xl border flex items-center justify-between ${
+                                                            rank === 0 ? 'bg-amber-500/15 border-amber-500/60 shadow-md shadow-amber-500/10' : 'bg-slate-800/60 border-slate-700/60'
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-center gap-3">
+                                                            <span className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-xs ${
+                                                                rank === 0 ? 'bg-amber-500 text-slate-950' : 'bg-slate-700 text-slate-300'
+                                                            }`}>
+                                                                {rank === 0 ? '👑' : rank + 1}
+                                                            </span>
+                                                            <div>
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <span className="font-bold text-sm text-slate-200">{p.name}</span>
+                                                                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 font-bold">
+                                                                        {p.id < humanCount ? 'YOU' : 'CPU'}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <span className="text-xl font-black text-slate-100">{p.score}</span>
+                                                            <span className="text-xs text-slate-400 font-bold ml-1">pt</span>
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            }
+                                        </div>
+                                    </div>
+
+                                    {/* Right: Dice Statistics Summary & Histogram */}
+                                    <div className="space-y-3">
+                                        <h3 className="text-xs font-extrabold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                                            <span>🎲</span> 出目出現統計分析
+                                        </h3>
+                                        
+                                        {/* Quick Stats Summary */}
+                                        {(() => {
+                                            const totalRolls = diceHistory.length;
+                                            const count7 = diceHistory.filter(h => h.total === 7).length;
+                                            const count2_12 = diceHistory.filter(h => h.total === 2 || h.total === 12).length;
+                                            
+                                            let maxNum = 7;
+                                            let maxC = -1;
+                                            [2,3,4,5,6,7,8,9,10,11,12].forEach(n => {
+                                                const c = diceHistory.filter(h => h.total === n).length;
+                                                if (c > maxC) {
+                                                    maxC = c;
+                                                    maxNum = n;
+                                                }
+                                            });
+
+                                            return (
+                                                <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                                                    <div className="bg-slate-800/80 p-2 rounded-xl border border-slate-700/80">
+                                                        <span className="text-[10px] text-slate-400 block">最多出目</span>
+                                                        <span className="text-base font-black text-amber-400">{maxNum} <span className="text-[10px] text-slate-300">({maxC}回)</span></span>
+                                                    </div>
+                                                    <div className="bg-slate-800/80 p-2 rounded-xl border border-slate-700/80">
+                                                        <span className="text-[10px] text-slate-400 block">7(減点)発生</span>
+                                                        <span className="text-base font-black text-red-400">{count7}回 <span className="text-[10px] text-slate-300">({totalRolls ? ((count7/totalRolls)*100).toFixed(0) : 0}%)</span></span>
+                                                    </div>
+                                                    <div className="bg-slate-800/80 p-2 rounded-xl border border-slate-700/80">
+                                                        <span className="text-[10px] text-slate-400 block">大穴(2,12)</span>
+                                                        <span className="text-base font-black text-emerald-400">{count2_12}回</span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
+
+                                        {/* Compact Histogram for Result Screen */}
+                                        <div className="space-y-1 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 max-h-48 overflow-y-auto">
+                                            {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => {
+                                                const count = diceHistory.filter(h => h.total === num).length;
+                                                const totalRolls = diceHistory.length || 1;
+                                                const maxCount = Math.max(...[2,3,4,5,6,7,8,9,10,11,12].map(n => diceHistory.filter(h => h.total === n).length), 1);
+                                                const barPercent = Math.min(100, Math.round((count / maxCount) * 100));
+                                                const isSeven = num === 7;
+
+                                                return (
+                                                    <div key={num} className="relative bg-slate-900 border border-slate-800 rounded-md overflow-hidden h-5 flex items-center px-2">
+                                                        <div
+                                                            className={`absolute left-0 top-0 bottom-0 transition-all rounded-r ${
+                                                                isSeven ? 'bg-red-800/50' : 'bg-indigo-700/50'
+                                                            }`}
+                                                            style={{ width: `${count > 0 ? Math.max(barPercent, 6) : 0}%` }}
+                                                        />
+                                                        <div className="relative z-10 w-full flex items-center justify-between text-[10px] font-bold">
+                                                            <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] ${isSeven ? 'bg-red-500/20 text-red-400 font-extrabold' : 'text-slate-300'}`}>
+                                                                {num}
+                                                            </span>
+                                                            <span className="text-slate-200 font-mono">{count}回 ({((count / totalRolls) * 100).toFixed(0)}%)</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Action Buttons */}
+                                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                                    <button
+                                        onClick={() => setShowResultModal(false)}
+                                        className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-sm rounded-xl border border-slate-700 transition-all"
+                                    >
+                                        🔍 盤面とログを確認する
+                                    </button>
+                                    <button
+                                        onClick={() => { setShowResultModal(true); setGameStage('menu'); }}
+                                        className="flex-1 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-sm rounded-xl shadow-lg shadow-amber-500/20 transition-all"
+                                    >
+                                        🔄 もう一度遊ぶ
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

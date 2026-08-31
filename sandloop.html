@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SandLoop - 名画の砂絵パズル</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .font-serif-title {
+            font-family: 'Cinzel', serif;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .modal-blur {
+            backdrop-filter: blur(8px);
+        }
+
+        /* Suction pulse animation for buckets */
+        @keyframes bucketPulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.06) rotate(-1deg); }
+            100% { transform: scale(1); }
+        }
+        .animate-suck {
+            animation: bucketPulse 0.15s ease-in-out infinite;
+        }
+
+        /* Bucket full pop-out removal animation overlay */
+        @keyframes bucketPopOut {
+            0% { transform: scale(1); opacity: 1; filter: brightness(1.2); }
+            40% { transform: scale(1.25) translateY(-8px); opacity: 0.9; filter: brightness(1.8); }
+            100% { transform: scale(0) translateY(-20px); opacity: 0; }
+        }
+        .animate-pop-out {
+            animation: bucketPopOut 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+            pointer-events: none;
+        }
+
+        /* Canvas glowing stream container */
+        .canvas-container {
+            box-shadow: 0 0 25px rgba(217, 119, 6, 0.15);
+        }
+    </style>
+</head>
+<body class="bg-stone-950 text-stone-100 min-h-screen flex flex-col items-center justify-between p-2 sm:p-4 overflow-x-hidden">
+
+    <div class="w-full max-w-md flex flex-col items-center gap-3 my-auto">
+        
+        <!-- Header Controls & Logo -->
+        <header class="w-full flex items-center justify-between bg-stone-900/90 border border-stone-800 rounded-2xl p-3 shadow-xl backdrop-blur">
+            <div class="flex items-center gap-2">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-600 to-amber-800 flex items-center justify-center shadow-inner border border-amber-400/30">
+                    <i class="fa-solid fa-hourglass-half text-amber-100 text-lg"></i>
+                </div>
+                <div class="flex flex-col">
+                    <h1 class="text-base font-bold font-serif-title tracking-wider text-amber-200 leading-none">SandLoop</h1>
+                    <span class="text-[10px] text-stone-400 font-medium">名画の砂絵パズル</span>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-1.5">
+                <button id="btnSound" class="w-9 h-9 rounded-xl bg-stone-800 border border-stone-700/60 hover:bg-stone-700 text-amber-300 flex items-center justify-center transition active:scale-95" title="効果音 ON/OFF">
+                    <i id="soundIcon" class="fa-solid fa-volume-high text-sm"></i>
+                </button>
+                <button id="btnStageSelect" class="w-9 h-9 rounded-xl bg-stone-800 border border-stone-700/60 hover:bg-stone-700 text-amber-300 flex items-center justify-center transition active:scale-95" title="ステージ選択">
+                    <i class="fa-solid fa-images text-sm"></i>
+                </button>
+                <button id="btnResetLevel" class="w-9 h-9 rounded-xl bg-stone-800 border border-stone-700/60 hover:bg-stone-700 text-amber-300 flex items-center justify-center transition active:scale-95" title="リセット">
+                    <i class="fa-solid fa-rotate-right text-sm"></i>
+                </button>
+                <button id="btnHelp" class="w-9 h-9 rounded-xl bg-stone-800 border border-stone-700/60 hover:bg-stone-700 text-amber-300 flex items-center justify-center transition active:scale-95" title="遊び方">
+                    <i class="fa-solid fa-circle-question text-sm"></i>
+                </button>
+            </div>
+        </header>
+
+        <main class="w-full flex flex-col items-center gap-2.5">
+            
+            <!-- Stage Title & Progress Header -->
+            <div class="w-full flex justify-between items-end px-1">
+                <div>
+                    <h2 id="paintingTitle" class="text-base font-bold text-amber-100">---</h2>
+                    <p id="paintingAuthor" class="text-xs text-stone-400">---</p>
+                </div>
+                <div class="text-right flex flex-col items-end">
+                    <span id="turboBadge" class="hidden text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/40 animate-pulse mb-0.5">
+                        <i class="fa-solid fa-bolt mr-0.5"></i> 高速自動回収中
+                    </span>
+                    <span class="text-xs font-bold font-mono text-amber-300"><span id="sandRemaining">0</span> / <span id="sandTotal">0</span></span>
+                </div>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="w-full h-2 rounded-full bg-stone-900 border border-stone-800 overflow-hidden">
+                <div id="progressBar" class="h-full bg-gradient-to-r from-amber-600 to-yellow-500 transition-all duration-300 w-0"></div>
+            </div>
+
+            <div class="canvas-container relative p-2 rounded-2xl bg-stone-900 border border-stone-800 shadow-2xl flex justify-center items-center overflow-hidden w-full">
+                <!-- Sandbox Canvas -->
+                <canvas id="sandCanvas" class="rounded-xl border border-stone-700/50 bg-stone-950 shadow-inner block cursor-pointer"></canvas>
+            </div>
+
+            <div class="w-full flex justify-between items-center px-1 mt-1">
+                <span class="text-xs font-bold text-amber-200 flex items-center gap-1">
+                    <i class="fa-solid fa-tray text-amber-500"></i> アクティブスロット (最大5個)
+                </span>
+                <span id="slotStatus" class="text-[11px] font-mono text-stone-400">空き: 5/5</span>
+            </div>
+
+            <!-- 5 Active Bucket Slots -->
+            <div class="w-full grid grid-cols-5 gap-1.5 sm:gap-2 relative">
+                <div id="slot-0" class="h-20 rounded-xl border border-dashed border-stone-700/80 bg-stone-900/50 flex items-center justify-center text-stone-600 font-mono text-xs relative">1</div>
+                <div id="slot-1" class="h-20 rounded-xl border border-dashed border-stone-700/80 bg-stone-900/50 flex items-center justify-center text-stone-600 font-mono text-xs relative">2</div>
+                <div id="slot-2" class="h-20 rounded-xl border border-dashed border-stone-700/80 bg-stone-900/50 flex items-center justify-center text-stone-600 font-mono text-xs relative">3</div>
+                <div id="slot-3" class="h-20 rounded-xl border border-dashed border-stone-700/80 bg-stone-900/50 flex items-center justify-center text-stone-600 font-mono text-xs relative">4</div>
+                <div id="slot-4" class="h-20 rounded-xl border border-dashed border-stone-700/80 bg-stone-900/50 flex items-center justify-center text-stone-600 font-mono text-xs relative">5</div>
+            </div>
+
+            <div class="w-full flex justify-between items-center px-1 mt-1">
+                <span class="text-xs font-bold text-stone-300 flex items-center gap-1">
+                    <i class="fa-solid fa-boxes-stacked text-amber-500"></i> バケツトレイ
+                </span>
+                <span class="text-[10px] text-stone-500">色タップでスロットへ移動</span>
+            </div>
+
+            <div id="bucketTray" class="w-full flex gap-2 overflow-x-auto p-2 bg-stone-900/80 border border-stone-800 rounded-2xl no-scrollbar min-h-[72px]">
+                <!-- Color-grouped bucket cards injected dynamically -->
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal Backdrop Overlay -->
+    <div id="modalOverlay" class="fixed inset-0 bg-black/80 modal-blur z-50 hidden flex items-center justify-center p-4">
+        
+        <!-- Stage Select Modal -->
+        <div id="stageModal" class="bg-stone-900 border border-stone-700 w-full max-w-sm rounded-3xl p-5 flex-col gap-4 hidden shadow-2xl">
+            <div class="flex justify-between items-center border-b border-stone-800 pb-3">
+                <h3 class="text-base font-bold text-amber-200 font-serif-title flex items-center gap-2">
+                    <i class="fa-solid fa-palette text-amber-500"></i> 名画ステージ選択
+                </h3>
+                <button class="modalClose text-stone-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div id="stageList" class="flex flex-col gap-2.5 max-h-80 overflow-y-auto pr-1 no-scrollbar">
+                <!-- Stages injected dynamically -->
+            </div>
+        </div>
+
+        <!-- Help Modal -->
+        <div id="helpModal" class="bg-stone-900 border border-stone-700 w-full max-w-sm rounded-3xl p-5 flex-col gap-4 hidden shadow-2xl">
+            <div class="flex justify-between items-center border-b border-stone-800 pb-3">
+                <h3 class="text-base font-bold text-amber-200 font-serif-title flex items-center gap-2">
+                    <i class="fa-solid fa-book-open text-amber-500"></i> SandLoopの遊び方
+                </h3>
+                <button class="modalClose text-stone-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="text-xs text-stone-300 space-y-2.5 leading-relaxed">
+                <p>1. <strong class="text-amber-300">バケツを選ぶ:</strong> 画面下のトレイから色タップでバケツを選択（最大5個まで配置）。</p>
+                <p>2. <strong class="text-amber-300">範囲回収 (下から4マス):</strong> 底面から上に向かって4マス分の範囲にある同色の砂絵粒子を吸い上げます。</p>
+                <p>3. <strong class="text-amber-300">ラスト1色自動高速回収:</strong> 残りのバケツが1色だけになると、スロットへ即座に自動補充され爆速で一気に回収されます！</p>
+                <p>4. <strong class="text-amber-300">満タン消去:</strong> バケツが一杯になるとポップ音と共にスロットから自動で消去されます。</p>
+            </div>
+            <button class="modalClose w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold text-xs transition">了解しました</button>
+        </div>
+
+        <!-- Victory Modal -->
+        <div id="winModal" class="bg-stone-900 border border-amber-500/50 w-full max-w-sm rounded-3xl p-6 flex-col items-center text-center gap-4 hidden shadow-2xl">
+            <div class="w-14 h-14 rounded-full bg-amber-500/20 border border-amber-400 flex items-center justify-center text-amber-300 text-2xl mb-1 shadow-inner">
+                <i class="fa-solid fa-trophy"></i>
+            </div>
+            <h3 class="text-lg font-bold text-amber-200 font-serif-title">ステージクリア！</h3>
+            <p class="text-xs text-stone-300">全ての砂粒を完璧に吸収し、名画の復元に成功しました！</p>
+            
+            <div id="winPaintingPreview" class="p-2 bg-stone-950 border border-stone-800 rounded-2xl shadow-inner flex justify-center my-1">
+                <!-- Preview Canvas -->
+            </div>
+
+            <button id="btnNextStage" class="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 text-stone-950 font-bold text-xs shadow-lg hover:brightness-110 active:scale-95 transition">
+                次のステージへ進む <i class="fa-solid fa-arrow-right ml-1"></i>
+            </button>
+        </div>
+
+        <!-- Lose Modal -->
+        <div id="loseModal" class="bg-stone-900 border border-rose-500/50 w-full max-w-sm rounded-3xl p-6 flex-col items-center text-center gap-4 hidden shadow-2xl">
+            <div class="w-14 h-14 rounded-full bg-rose-500/20 border border-rose-400 flex items-center justify-center text-rose-400 text-2xl mb-1 shadow-inner">
+                <i class="fa-solid fa-lock"></i>
+            </div>
+            <h3 class="text-lg font-bold text-rose-200 font-serif-title">手詰まり（ゲームオーバー）</h3>
+            <p class="text-xs text-stone-300 leading-relaxed">5つのスロットが全て埋まり、最下層の砂の色と一致するバケツがなくなりました。</p>
+
+            <button id="btnRetry" class="w-full py-3 rounded-xl bg-stone-800 hover:bg-stone-700 border border-stone-600 text-amber-300 font-bold text-xs shadow-lg active:scale-95 transition">
+                <i class="fa-solid fa-rotate-right mr-1"></i> もう一度挑戦する
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        const GRID_COLS = 48;
+        const GRID_ROWS = 64;
+        const FIXED_BUCKET_CAPACITY = 64;
+        const SEARCH_DEPTH = 4; // Bottom 4 rows search depth
+
+        const STAGES = [
+            {
+                title: "神奈川沖浪裏",
+                author: "葛飾北斎",
+                palette: ["#F4E8C1", "#5A9BD5", "#1B365D", "#C8963E", "#FFFFFF"],
+                paletteNames: ["生成色", "波浅青", "濃藍", "舟木地", "白波"],
+                generator: (r, c) => {
+                    const normR = r / GRID_ROWS;
+                    const normC = c / GRID_COLS;
+                    const waveHeight = 0.45 + 0.25 * Math.sin(normC * Math.PI * 2.2) - 0.15 * Math.cos(normC * Math.PI * 4);
+                    if (normR > waveHeight && normR < waveHeight + 0.08) return 4;
+                    if (normR >= waveHeight + 0.08 && normR < waveHeight + 0.3) return 2;
+                    if (normR >= waveHeight + 0.3) return 1;
+                    if (normC > 0.42 && normC < 0.58) {
+                        const fujiPeak = 0.52 + Math.abs(normC - 0.5) * 2.2;
+                        if (normR > fujiPeak && normR < 0.68) return (normR < fujiPeak + 0.05) ? 4 : 2;
+                    }
+                    if (normR > 0.7 && normR < 0.76 && (normC > 0.15 && normC < 0.45 || normC > 0.6 && normC < 0.88)) return 3;
+                    return 0;
+                }
+            },
+            {
+                title: "星月夜",
+                author: "フィンセント・ファン・ゴッホ",
+                palette: ["#0B192C", "#F3C623", "#1E3E62", "#122620", "#4682B4"],
+                paletteNames: ["夜空", "星月", "群青", "糸杉", "渦巻"],
+                generator: (r, c) => {
+                    const normR = r / GRID_ROWS;
+                    const normC = c / GRID_COLS;
+                    if (normC < 0.22) {
+                        const cypressWidth = 0.05 + (1 - normR) * 0.18;
+                        if (Math.abs(normC - 0.1) < cypressWidth) return 3;
+                    }
+                    const dxMoon = normC - 0.82;
+                    const dyMoon = normR - 0.18;
+                    if (dxMoon * dxMoon + dyMoon * dyMoon < 0.008) return 1;
+                    const swirl = Math.sin(normC * 8 + normR * 6) + Math.cos(normC * 4 - normR * 8);
+                    if (normR < 0.55) {
+                        if (swirl > 1.1) return 1;
+                        if (swirl > 0.2) return 4;
+                        return 0;
+                    }
+                    if (normR >= 0.55 && normR < 0.75) return 2;
+                    return 0;
+                }
+            },
+            {
+                title: "真珠の耳飾りの少女",
+                author: "ヨハネス・フェルメール",
+                palette: ["#121212", "#2B4C7E", "#D4AF37", "#8B5A2B", "#F2D1B3"],
+                paletteNames: ["背景", "ターバン", "帯黄", "上着褐", "肌色/真珠"],
+                generator: (r, c) => {
+                    const normR = r / GRID_ROWS;
+                    const normC = c / GRID_COLS;
+                    const dx = normC - 0.5;
+                    const dy = normR - 0.45;
+                    if (Math.abs(normC - 0.46) < 0.03 && Math.abs(normR - 0.52) < 0.03) return 4;
+                    if (normR > 0.18 && normR < 0.36 && Math.abs(normC - 0.5) < 0.22) return 1;
+                    if (normR >= 0.36 && normR < 0.42 && Math.abs(normC - 0.5) < 0.2) return 2;
+                    if (dx * dx + dy * dy < 0.045 && normC > 0.38) return 4;
+                    if (normR >= 0.6) return 3;
+                    return 0;
+                }
+            },
+            {
+                title: "モナ・リザ",
+                author: "レオナルド・ダ・ヴィンチ",
+                palette: ["#1A1815", "#6B5B3E", "#E0C097", "#3A4B35", "#33281E"],
+                paletteNames: ["影", "衣類", "肌色", "背景", "ヴェール"],
+                generator: (r, c) => {
+                    const normR = r / GRID_ROWS;
+                    const normC = c / GRID_COLS;
+                    const dxFace = normC - 0.5;
+                    const dyFace = normR - 0.28;
+                    if (dxFace * dxFace + dyFace * dyFace < 0.015) return 2;
+                    if (normR > 0.72 && normR < 0.82 && Math.abs(normC - 0.5) < 0.2) return 2;
+                    if (normR > 0.18 && normR < 0.5 && Math.abs(normC - 0.5) < 0.22) return 4;
+                    if (normR >= 0.4 && Math.abs(normC - 0.5) < 0.35) return 1;
+                    if (normR < 0.5) return 3;
+                    return 0;
+                }
+            },
+            {
+                title: "叫び",
+                author: "エドヴァルド・ムンク",
+                palette: ["#D94A1F", "#E89D27", "#1E3A4C", "#5C321E", "#2B2B2B"],
+                paletteNames: ["夕空", "黄雲", "紺", "手すり", "人物"],
+                generator: (r, c) => {
+                    const normR = r / GRID_ROWS;
+                    const normC = c / GRID_COLS;
+                    if (normC < 0.3 + (1 - normR) * 0.5 && normC > 0.1 + (1 - normR) * 0.5) return 3;
+                    const dxFig = normC - 0.52;
+                    const dyFig = normR - 0.62;
+                    if (dxFig * dxFig + dyFig * dyFig * 0.6 < 0.02) return 4;
+                    if (normR < 0.4) {
+                        return Math.sin(normC * 10 + normR * 5) > 0 ? 0 : 1;
+                    }
+                    return 2;
+                }
+            },
+            {
+                title: "ひまわり",
+                author: "フィンセント・ファン・ゴッホ",
+                palette: ["#F9E076", "#D97706", "#78350F", "#65A30D", "#FEF08A"],
+                paletteNames: ["背景黄", "花弁金", "種子褐", "茎葉緑", "花瓶黄"],
+                generator: (r, c) => {
+                    const normR = r / GRID_ROWS;
+                    const normC = c / GRID_COLS;
+                    if (normR > 0.55 && normR < 0.82) {
+                        const vaseW = 0.22 - (normR - 0.55) * 0.1;
+                        if (Math.abs(normC - 0.5) < vaseW) return 4;
+                    }
+                    if (normR >= 0.78) return 0;
+                    const centers = [
+                        {c: 0.5, r: 0.3, size: 0.09},
+                        {c: 0.33, r: 0.22, size: 0.07},
+                        {c: 0.67, r: 0.24, size: 0.07},
+                        {c: 0.28, r: 0.42, size: 0.08},
+                        {c: 0.72, r: 0.44, size: 0.08}
+                    ];
+                    for (const sf of centers) {
+                        const dc = normC - sf.c;
+                        const dr = normR - sf.r;
+                        const dist2 = dc * dc + dr * dr;
+                        if (dist2 < sf.size * sf.size * 0.25) return 2;
+                        if (dist2 < sf.size * sf.size) return 1;
+                    }
+                    if (normR > 0.35 && normR < 0.6 && Math.abs(normC - 0.5) < 0.08) return 3;
+                    return 0;
+                }
+            },
+            {
+                title: "接吻",
+                author: "グスタフ・クリムト",
+                palette: ["#312E81", "#F59E0B", "#10B981", "#FDE047", "#FCA5A5"],
+                paletteNames: ["夜空底", "黄金マント", "花模様緑", "金箔パターン", "肌色"],
+                generator: (r, c) => {
+                    const normR = r / GRID_ROWS;
+                    const normC = c / GRID_COLS;
+                    const dx = normC - 0.5;
+                    const dy = normR - 0.45;
+                    if (Math.abs(normC - 0.45) < 0.08 && Math.abs(normR - 0.22) < 0.07) return 4;
+                    if (Math.abs(normC - 0.55) < 0.08 && Math.abs(normR - 0.26) < 0.07) return 4;
+                    if (dx * dx * 2 + dy * dy < 0.12 && normR > 0.25 && normR < 0.8) {
+                        if ((Math.sin(r * 0.4) + Math.cos(c * 0.4)) > 0.8) return 2;
+                        if ((r + c) % 5 === 0) return 3;
+                        return 1;
+                    }
+                    if (normR >= 0.8) return 2;
+                    return 0;
+                }
+            },
+            {
+                title: "凱風快晴 (赤富士)",
+                author: "葛飾北斎",
+                palette: ["#0284C7", "#991B1B", "#15803D", "#FFFFFF", "#FDE047"],
+                paletteNames: ["快晴青", "赤富士", "樹海緑", "残雪白", "湧雲黄"],
+                generator: (r, c) => {
+                    const normR = r / GRID_ROWS;
+                    const normC = c / GRID_COLS;
+                    const fujiSlope = 0.85 - Math.abs(normC - 0.58) * 1.1;
+                    if (normR > fujiSlope && normR < 0.82) {
+                        if (normR < fujiSlope + 0.08 && normC > 0.48 && normC < 0.65) return 3;
+                        return 1;
+                    }
+                    if (normR >= 0.82) return 2;
+                    if (normR < 0.4 && Math.sin(normC * 12 + normR * 15) > 0.6) return 4;
+                    return 0;
+                }
+            },
+            {
+                title: "日傘をさす女",
+                author: "クロード・モネ",
+                palette: ["#38BDF8", "#16A34A", "#F8FAFC", "#84CC16", "#0284C7"],
+                paletteNames: ["風空", "日傘緑", "ドレス白", "草原黄緑", "空の影"],
+                generator: (r, c) => {
+                    const normR = r / GRID_ROWS;
+                    const normC = c / GRID_COLS;
+                    const hillHeight = 0.68 - (normC - 0.5) * 0.2;
+                    if (normR >= hillHeight) return 3;
+                    const dParasol = Math.hypot(normC - 0.42, normR - 0.22);
+                    if (dParasol < 0.12 && normR < 0.22) return 1;
+                    if (normR >= 0.22 && normR < hillHeight && Math.abs(normC - 0.48) < (normR - 0.18) * 0.35) {
+                        if (normC > 0.5) return 4;
+                        return 2;
+                    }
+                    if ((Math.sin(normC * 8) + Math.cos(normR * 6)) > 0.5) return 2;
+                    return 0;
+                }
+            },
+            {
+                title: "牛乳を注ぐ女",
+                author: "ヨハネス・フェルメール",
+                palette: ["#D97706", "#1D4ED8", "#EAB308", "#78350F", "#F59E0B"],
+                paletteNames: ["壁黄土", "スカート青", "服鮮黄", "テーブル褐", "壺・パン"],
+                generator: (r, c) => {
+                    const normR = r / GRID_ROWS;
+                    const normC = c / GRID_COLS;
+                    if (normR > 0.58 && normC < 0.55) {
+                        if (normR < 0.68 && normC > 0.25 && normC < 0.48) return 4;
+                        return 3;
+                    }
+                    if (normC > 0.35 && normC < 0.7) {
+                        if (normR > 0.18 && normR < 0.38) return 2;
+                        if (normR >= 0.38 && normR <= 0.85) return 1;
+                    }
+                    return 0;
+                }
+            },
+            {
+                title: "グランド・ジャット島の日曜日の午後",
+                author: "ジョルジュ・スーラ",
+                palette: ["#38BDF8", "#15803D", "#166534", "#E11D48", "#1E293B"],
+                paletteNames: ["水面青", "日向芝生", "木陰深緑", "日傘赤", "人物影"],
+                generator: (r, c) => {
+                    const normR = r / GRID_ROWS;
+                    const normC = c / GRID_COLS;
+                    if (normR < 0.35 && normC > 0.4) return 0;
+                    if (normR >= 0.35) {
+                        if (Math.sin(normC * 6 + normR * 4) > 0.3) return 2;
+                        return 1;
+                    }
+                    if (Math.abs(normC - 0.8) < 0.08 && normR > 0.3 && normR < 0.85) return 4;
+                    if (Math.hypot(normC - 0.3, normR - 0.4) < 0.06) return 3;
+                    return 1;
+                }
+            },
+            {
+                title: "睡蓮",
+                author: "クロード・モネ",
+                palette: ["#1B4D3E", "#4B6B94", "#E8A7B8", "#8FA382", "#F0E68C"],
+                paletteNames: ["深池緑", "水面青", "睡蓮ピンク", "水草緑", "光の黄"],
+                generator: (r, c) => {
+                    const normR = r / GRID_ROWS;
+                    const normC = c / GRID_COLS;
+                    const ripple = Math.sin(normC * 12 + normR * 8);
+                    const lily1 = Math.hypot(normC - 0.3, normR - 0.6);
+                    const lily2 = Math.hypot(normC - 0.7, normR - 0.4);
+                    const lily3 = Math.hypot(normC - 0.5, normR - 0.8);
+                    if (lily1 < 0.12 || lily2 < 0.14 || lily3 < 0.1) return 2;
+                    if (lily1 < 0.22 || lily2 < 0.25 || lily3 < 0.18) return 3;
+                    if (ripple > 0.6) return 4;
+                    if (normR > 0.5) return 0;
+                    return 1;
+                }
+            },
+            {
+                title: "ダンス",
+                author: "アンリ・マティス",
+                palette: ["#1E3E62", "#15803D", "#EF4444", "#FDE047", "#FFFFFF"],
+                paletteNames: ["夜空深青", "緑の丘", "踊り手朱赤", "光黄", "輪郭白"],
+                generator: (r, c) => {
+                    const normR = r / GRID_ROWS;
+                    const normC = c / GRID_COLS;
+                    const hillHeight = 0.6 + Math.sin(normC * Math.PI) * 0.15;
+                    if (normR >= hillHeight) return 1;
+                    const dx = normC - 0.5;
+                    const dy = normR - 0.45;
+                    const radius = Math.hypot(dx * 1.3, dy);
+                    if (radius > 0.18 && radius < 0.32) {
+                        const angle = Math.atan2(dy, dx);
+                        if (Math.sin(angle * 5) > -0.2) return 2;
+                        return 4;
+                    }
+                    if (radius <= 0.18 && radius > 0.12) return 3;
+                    return 0;
+                }
+            },
+            {
+                title: "記憶の固執",
+                author: "サルバドール・ダリ",
+                palette: ["#0F172A", "#D97706", "#FDE047", "#854D0E", "#94A3B8"],
+                paletteNames: ["黄昏空", "荒野金", "溶ける時計", "枯れ木茶", "台座銀"],
+                generator: (r, c) => {
+                    const normR = r / GRID_ROWS;
+                    const normC = c / GRID_COLS;
+                    if (normR > 0.6) {
+                        if (normC < 0.45 && normR > 0.65 && normR < 0.85) return 2;
+                        return 1;
+                    }
+                    if (normC < 0.35 && normR > 0.4) return 4;
+                    if (Math.abs(normC - 0.2) < 0.03 && normR > 0.2 && normR < 0.5) return 3;
+                    if (Math.hypot(normC - 0.25, normR - 0.35) < 0.08) return 2;
+                    return 0;
+                }
+            },
+            {
+                title: "ヴィーナスの誕生",
+                author: "サンドロ・ボッティチェッリ",
+                palette: ["#0284C7", "#F59E0B", "#FCA5A5", "#16A34A", "#FEF08A"],
+                paletteNames: ["エーゲ海", "黄金の髪", "真珠肌", "岸辺の樹々", "巨大貝殻"],
+                generator: (r, c) => {
+                    const normR = r / GRID_ROWS;
+                    const normC = c / GRID_COLS;
+                    if (normR > 0.75 && Math.hypot((normC - 0.5) * 1.5, normR - 0.85) < 0.2) return 4;
+                    if (Math.abs(normC - 0.5) < 0.08 && normR > 0.2 && normR < 0.8) return 2;
+                    if (Math.abs(normC - 0.54) < 0.12 && normR > 0.25 && normR < 0.6) return 1;
+                    if (normC > 0.78 && normR > 0.1) return 3;
+                    return 0;
+                }
+            },
+            {
+                title: "夜のカフェテラス",
+                author: "フィンセント・ファン・ゴッホ",
+                palette: ["#0284C7", "#F59E0B", "#1E293B", "#3B82F6", "#FEF08A"],
+                paletteNames: ["星夜空", "カフェ黄金", "石畳影", "奥の建物", "輝く星"],
+                generator: (r, c) => {
+                    const normR = r / GRID_ROWS;
+                    const normC = c / GRID_COLS;
+                    if (normC < 0.55 - normR * 0.2 && normR < 0.75) return 1;
+                    if (normR >= 0.7) return Math.sin(normC * 10 + normR * 12) > 0 ? 2 : 3;
+                    if (normC > 0.5 && normR < 0.4) {
+                        if (Math.sin(normC * 15) * Math.cos(normR * 15) > 0.6) return 4;
+                        return 0;
+                    }
+                    return 3;
+                }
+            },
+            {
+                title: "落穂拾い",
+                author: "ジャン＝フランソワ・ミレー",
+                palette: ["#D97706", "#78350F", "#F59E0B", "#38BDF8", "#57534E"],
+                paletteNames: ["黄金の畑", "大地・衣類", "積み藁", "地平の空", "農婦の影"],
+                generator: (r, c) => {
+                    const normR = r / GRID_ROWS;
+                    const normC = c / GRID_COLS;
+                    if (normR < 0.35) return 3;
+                    if (normR < 0.5) return 2;
+                    if (normR >= 0.5) {
+                        const fig1 = Math.hypot(normC - 0.25, normR - 0.65);
+                        const fig2 = Math.hypot(normC - 0.48, normR - 0.68);
+                        const fig3 = Math.hypot(normC - 0.72, normR - 0.62);
+                        if (fig1 < 0.1 || fig2 < 0.11 || fig3 < 0.09) return 1;
+                        if (fig1 < 0.14 || fig2 < 0.15 || fig3 < 0.12) return 4;
+                        return 0;
+                    }
+                    return 0;
+                }
+            },
+            {
+                title: "ムーラン・ド・ラ・ギャレットの舞踏会",
+                author: "ピエール＝オーギュスト・ルノワール",
+                palette: ["#1E3A8A", "#FDE047", "#E11D48", "#15803D", "#F59E0B"],
+                paletteNames: ["木漏れ日青", "ドレス光黄", "華やか赤", "庭園の緑", "シャンデリア金"],
+                generator: (r, c) => {
+                    const normR = r / GRID_ROWS;
+                    const normC = c / GRID_COLS;
+                    const pattern = Math.sin(normC * 10 + normR * 8) + Math.cos(normC * 6 - normR * 12);
+                    if (normR < 0.25) return pattern > 0.5 ? 4 : 3;
+                    if (pattern > 1.2) return 1;
+                    if (pattern > 0.4) return 2;
+                    if (pattern > -0.4) return 0;
+                    return 3;
+                }
+            },
+            {
+                title: "民衆を導く自由の女神",
+                author: "ウジェーヌ・ドラクロワ",
+                palette: ["#1E293B", "#DC2626", "#F59E0B", "#E2E8F0", "#475569"],
+                paletteNames: ["戦煙黒", "旗の三色赤", "松明・輝き", "自由の肌色/白", "背景青灰"],
+                generator: (r, c) => {
+                    const normR = r / GRID_ROWS;
+                    const normC = c / GRID_COLS;
+                    if (normC > 0.45 && normC < 0.75 && normR > 0.1 && normR < 0.3) {
+                        if (normC < 0.55) return 4;
+                        return 1;
+                    }
+                    if (Math.abs(normC - 0.5) < 0.12 && normR > 0.25 && normR < 0.75) return 3;
+                    if (normR > 0.75) return 0;
+                    if (Math.sin(normC * 8 + normR * 6) > 0.2) return 2;
+                    return 4;
+                }
+            },
+            {
+                title: "アルルのはね橋",
+                author: "フィンセント・ファン・ゴッホ",
+                palette: ["#0284C7", "#EAB308", "#78350F", "#22C55E", "#F8FAFC"],
+                paletteNames: ["澄み空青", "跳ね橋金", "橋脚褐", "運河草緑", "水面光白"],
+                generator: (r, c) => {
+                    const normR = r / GRID_ROWS;
+                    const normC = c / GRID_COLS;
+                    if (normR < 0.4) return 0;
+                    if (normR > 0.65) {
+                        if (Math.sin(normC * 12 + normR * 20) > 0.5) return 4;
+                        return 0;
+                    }
+                    if (normC > 0.25 && normC < 0.75 && normR >= 0.4 && normR <= 0.65) {
+                        const dx = normC - 0.5;
+                        const dy = normR - 0.52;
+                        if (Math.abs(dy - dx * 0.3) < 0.05 || Math.abs(dy + dx * 0.3) < 0.05) return 1;
+                        if (normR > 0.52) return 2;
+                    }
+                    return 3;
+                }
+            }
+        ];
+
+        class SoundManager {
+            constructor() {
+                this.enabled = true;
+                this.ctx = null;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) this.ctx = new AudioCtx();
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            playPop() {
+                if (!this.enabled) return;
+                this.init();
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(450, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(850, this.ctx.currentTime + 0.05);
+                gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.05);
+            }
+
+            playBucketFullPop() {
+                if (!this.enabled) return;
+                this.init();
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1200, this.ctx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.18, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.1);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.1);
+            }
+
+            playSuck() {
+                if (!this.enabled) return;
+                this.init();
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(300 + Math.random() * 200, this.ctx.currentTime);
+                gain.gain.setValueAtTime(0.03, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.04);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.04);
+            }
+
+            playWin() {
+                if (!this.enabled) return;
+                this.init();
+                if (!this.ctx) return;
+                [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.value = freq;
+                    gain.gain.setValueAtTime(0.1, this.ctx.currentTime + idx * 0.1);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + idx * 0.1 + 0.3);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(this.ctx.currentTime + idx * 0.1);
+                    osc.stop(this.ctx.currentTime + idx * 0.1 + 0.3);
+                });
+            }
+
+            playLose() {
+                if (!this.enabled) return;
+                this.init();
+                if (!this.ctx) return;
+                [280, 240, 200, 160].forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.value = freq;
+                    gain.gain.setValueAtTime(0.08, this.ctx.currentTime + idx * 0.12);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + idx * 0.12 + 0.25);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(this.ctx.currentTime + idx * 0.12);
+                    osc.stop(this.ctx.currentTime + idx * 0.12 + 0.25);
+                });
+            }
+        }
+        const sound = new SoundManager();
+
+        class SandLoopGame {
+            constructor() {
+                this.canvas = document.getElementById('sandCanvas');
+                if (!this.canvas) return;
+                this.ctx = this.canvas.getContext('2d');
+                
+                this.currentStageIndex = 0;
+                this.grid = [];
+                this.buckets = [];
+                this.slots = [null, null, null, null, null];
+                this.particles = [];
+                this.animatingPopSlots = new Map(); // Track overlay popout animations without blocking logic slot refill
+                
+                this.totalSandCount = 0;
+                this.remainingSandCount = 0;
+                this.isAnimating = false;
+                this.isGameOver = false;
+                this.isWin = false;
+                this.isTurboMode = false;
+
+                this.cellSize = 6;
+                this.absorptionCounter = 0;
+
+                this.initEventListeners();
+            }
+
+            initStage(stageIndex) {
+                this.currentStageIndex = stageIndex;
+                const stage = STAGES[stageIndex];
+
+                document.getElementById('paintingTitle').innerText = stage.title;
+                document.getElementById('paintingAuthor').innerText = stage.author;
+                document.getElementById('turboBadge').classList.add('hidden');
+
+                const maxCanvasWidth = Math.min(window.innerWidth - 32, 360);
+                this.cellSize = Math.max(4, Math.floor(maxCanvasWidth / GRID_COLS));
+                this.canvas.width = GRID_COLS * this.cellSize;
+                this.canvas.height = GRID_ROWS * this.cellSize;
+
+                this.grid = [];
+                const colorCounts = {0:0, 1:0, 2:0, 3:0, 4:0};
+
+                for (let r = 0; r < GRID_ROWS; r++) {
+                    const row = [];
+                    for (let c = 0; c < GRID_COLS; c++) {
+                        const colorIdx = stage.generator(r, c);
+                        row.push(colorIdx);
+                        colorCounts[colorIdx]++;
+                    }
+                    this.grid.push(row);
+                }
+
+                this.totalSandCount = GRID_ROWS * GRID_COLS;
+                this.remainingSandCount = this.totalSandCount;
+
+                this.buckets = [];
+                let bucketIdCounter = 1;
+
+                Object.keys(colorCounts).forEach(cIdx => {
+                    const colorIndex = parseInt(cIdx);
+                    let count = colorCounts[colorIndex];
+                    
+                    while (count > 0) {
+                        const cap = Math.min(count, FIXED_BUCKET_CAPACITY);
+                        this.buckets.push({
+                            id: bucketIdCounter++,
+                            colorIndex: colorIndex,
+                            capacity: cap,
+                            initialCapacity: cap
+                        });
+                        count -= cap;
+                    }
+                });
+
+                this.buckets.sort(() => Math.random() - 0.5);
+
+                this.slots = [null, null, null, null, null];
+                this.particles = [];
+                this.animatingPopSlots.clear();
+                this.isGameOver = false;
+                this.isWin = false;
+                this.isTurboMode = false;
+                this.absorptionCounter = 0;
+
+                this.updateUI();
+                this.renderTray();
+                this.renderSlots();
+                this.drawCanvas();
+
+                if (!this.isAnimating) {
+                    this.isAnimating = true;
+                    requestAnimationFrame((time) => this.gameLoop(time));
+                }
+            }
+
+            gameLoop(timestamp) {
+                this.checkAutoFillAndFastMode();
+                this.updateAbsorption();
+                this.updateGravity();
+                this.updateParticles();
+                this.drawCanvas();
+
+                if (this.isAnimating) {
+                    requestAnimationFrame((time) => this.gameLoop(time));
+                }
+            }
+
+            // Check if only 1 color remains, auto-refill active slots seamlessly & trigger turbo speed mode
+            checkAutoFillAndFastMode() {
+                if (this.isGameOver || this.isWin) return false;
+
+                const activeColors = new Set();
+                this.buckets.forEach(b => activeColors.add(b.colorIndex));
+                this.slots.forEach(s => { if (s) activeColors.add(s.colorIndex); });
+
+                const isSingleColorLeft = (activeColors.size === 1);
+                this.isTurboMode = isSingleColorLeft;
+
+                const turboBadge = document.getElementById('turboBadge');
+                if (turboBadge) {
+                    if (isSingleColorLeft) turboBadge.classList.remove('hidden');
+                    else turboBadge.classList.add('hidden');
+                }
+
+                // Instant refill when only 1 color is left or available slots are open
+                if (isSingleColorLeft && this.buckets.length > 0) {
+                    let filled = false;
+                    for (let i = 0; i < 5; i++) {
+                        if (this.slots[i] === null && this.buckets.length > 0) {
+                            const b = this.buckets.shift();
+                            this.slots[i] = b;
+                            filled = true;
+                        }
+                    }
+                    if (filled) {
+                        sound.playPop();
+                        this.renderTray();
+                        this.renderSlots();
+                        this.updateUI();
+                    }
+                }
+
+                return isSingleColorLeft;
+            }
+
+            updateAbsorption() {
+                if (this.isGameOver || this.isWin) return;
+
+                this.absorptionCounter++;
+
+                // Throttled speed for normal play, non-stop turbo speed for single color finish
+                if (!this.isTurboMode && this.absorptionCounter % 3 !== 0) {
+                    return;
+                }
+
+                let absorbedAny = false;
+                const activeSuckingSlots = new Set();
+
+                // Absorption iterations per frame (1x normal, 6x turbo)
+                const iterations = this.isTurboMode ? 6 : 1;
+
+                for (let iter = 0; iter < iterations; iter++) {
+                    for (let c = 0; c < GRID_COLS; c++) {
+                        let bottomRow = -1;
+                        for (let r = GRID_ROWS - 1; r >= 0; r--) {
+                            if (this.grid[r][c] !== -1) {
+                                bottomRow = r;
+                                break;
+                            }
+                        }
+
+                        if (bottomRow === -1) continue;
+
+                        const searchTop = Math.max(0, bottomRow - SEARCH_DEPTH + 1);
+
+                        for (let r = bottomRow; r >= searchTop; r--) {
+                            const sandColorIdx = this.grid[r][c];
+                            if (sandColorIdx === -1) continue;
+
+                            for (let s = 0; s < 5; s++) {
+                                const bucket = this.slots[s];
+                                if (bucket && bucket.colorIndex === sandColorIdx && bucket.capacity > 0) {
+                                    const stage = STAGES[this.currentStageIndex];
+                                    const color = stage.palette[sandColorIdx];
+
+                                    this.grid[r][c] = -1;
+                                    bucket.capacity--;
+                                    this.remainingSandCount--;
+                                    absorbedAny = true;
+                                    activeSuckingSlots.add(s);
+
+                                    this.createParticleStream(c, r, s, color);
+                                    this.updateSlotUI(s);
+
+                                    if (Math.random() < (this.isTurboMode ? 0.03 : 0.08)) {
+                                        sound.playSuck();
+                                    }
+
+                                    // When bucket is filled, instantly free logical slot so auto-refill can happen without lag
+                                    if (bucket.capacity <= 0) {
+                                        this.triggerBucketPopOutAnimation(s, bucket);
+                                    }
+
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                for (let s = 0; s < 5; s++) {
+                    const slotElem = document.getElementById(`slot-${s}`);
+                    if (!slotElem) continue;
+                    const bucketContainer = slotElem.querySelector('.bucket-container');
+                    if (bucketContainer) {
+                        if (activeSuckingSlots.has(s)) {
+                            bucketContainer.classList.add('animate-suck');
+                        } else {
+                            bucketContainer.classList.remove('animate-suck');
+                        }
+                    }
+                }
+
+                if (absorbedAny) {
+                    this.updateUI();
+                    this.checkVictory();
+                } else {
+                    this.checkGameOver();
+                }
+            }
+
+            triggerBucketPopOutAnimation(slotIndex, fullBucket) {
+                sound.playBucketFullPop();
+
+                // 1. Immediately free the logical slot so auto-refill can occupy it in the same frame
+                this.slots[slotIndex] = null;
+
+                // 2. Spawn a temporary floating element for the pop-out animation so UI feedback remains beautiful
+                const slotElem = document.getElementById(`slot-${slotIndex}`);
+                if (slotElem) {
+                    const stage = STAGES[this.currentStageIndex];
+                    const colorHex = stage.palette[fullBucket.colorIndex];
+
+                    const popOverlay = document.createElement('div');
+                    popOverlay.className = 'bucket-container absolute inset-0 rounded-xl p-1.5 flex flex-col justify-between items-center z-20 overflow-hidden border border-amber-400 shadow-2xl animate-pop-out';
+                    popOverlay.style.background = 'linear-gradient(180deg, #26201a 0%, #171310 100%)';
+                    popOverlay.innerHTML = `
+                        <div class="w-full flex justify-between items-center z-10">
+                            <span class="w-2.5 h-2.5 rounded-full border border-white/40 shadow" style="background-color: ${colorHex}"></span>
+                        </div>
+                        <i class="fa-solid fa-bucket text-xl z-10 my-auto drop-shadow" style="color: ${colorHex}"></i>
+                        <div class="fill-bar absolute bottom-0 left-0 right-0 bg-amber-600/35 h-full"></div>
+                    `;
+
+                    slotElem.appendChild(popOverlay);
+                    setTimeout(() => {
+                        popOverlay.remove();
+                    }, 350);
+                }
+
+                // Render slots to reflect logical vacancy immediately (or trigger immediate auto-refill)
+                this.renderSlots();
+                this.checkAutoFillAndFastMode();
+            }
+
+            updateGravity() {
+                for (let r = GRID_ROWS - 2; r >= 0; r--) {
+                    const cols = [];
+                    for (let c = 0; c < GRID_COLS; c++) cols.push(c);
+                    if (Math.random() < 0.5) cols.reverse();
+
+                    for (const c of cols) {
+                        if (this.grid[r][c] === -1) continue;
+
+                        if (this.grid[r + 1][c] === -1) {
+                            this.grid[r + 1][c] = this.grid[r][c];
+                            this.grid[r][c] = -1;
+                        } else {
+                            const canLeft = c > 0 && this.grid[r + 1][c - 1] === -1 && this.grid[r][c - 1] === -1;
+                            const canRight = c < GRID_COLS - 1 && this.grid[r + 1][c + 1] === -1 && this.grid[r][c + 1] === -1;
+
+                            if (canLeft && canRight) {
+                                const dir = Math.random() < 0.5 ? -1 : 1;
+                                this.grid[r + 1][c + dir] = this.grid[r][c];
+                                this.grid[r][c] = -1;
+                            } else if (canLeft) {
+                                this.grid[r + 1][c - 1] = this.grid[r][c];
+                                this.grid[r][c] = -1;
+                            } else if (canRight) {
+                                this.grid[r + 1][c + 1] = this.grid[r][c];
+                                this.grid[r][c] = -1;
+                            }
+                        }
+                    }
+                }
+            }
+
+            createParticleStream(col, row, slotIndex, color) {
+                const startX = col * this.cellSize + this.cellSize / 2;
+                const startY = row * this.cellSize + this.cellSize / 2;
+
+                const slotElem = document.getElementById(`slot-${slotIndex}`);
+                if (!slotElem) return;
+
+                const slotRect = slotElem.getBoundingClientRect();
+                const canvasRect = this.canvas.getBoundingClientRect();
+
+                const targetX = slotRect.left + slotRect.width / 2 - canvasRect.left;
+                const targetY = slotRect.top + slotRect.height / 2 - canvasRect.top;
+
+                const midX = (startX + targetX) / 2 + (Math.random() - 0.5) * 30;
+                const midY = Math.min(startY, targetY) - 25 - Math.random() * 20;
+
+                // Turbo mode particles move 4x faster
+                const particleSpeed = this.isTurboMode ? (0.12 + Math.random() * 0.08) : (0.02 + Math.random() * 0.015);
+
+                this.particles.push({
+                    startX, startY,
+                    midX, midY,
+                    targetX, targetY,
+                    x: startX,
+                    y: startY,
+                    color: color,
+                    size: 1.6 + Math.random() * 1.2,
+                    progress: 0,
+                    speed: particleSpeed
+                });
+            }
+
+            updateParticles() {
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    const p = this.particles[i];
+                    p.progress += p.speed;
+
+                    if (p.progress >= 1) {
+                        this.particles.splice(i, 1);
+                    } else {
+                        const t = p.progress;
+                        const invT = 1 - t;
+                        p.x = invT * invT * p.startX + 2 * invT * t * p.midX + t * t * p.targetX;
+                        p.y = invT * invT * p.startY + 2 * invT * t * p.midY + t * t * p.targetY;
+                    }
+                }
+            }
+
+            drawCanvas() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                const palette = STAGES[this.currentStageIndex].palette;
+
+                for (let r = 0; r < GRID_ROWS; r++) {
+                    for (let c = 0; c < GRID_COLS; c++) {
+                        const colorIdx = this.grid[r][c];
+                        if (colorIdx !== -1) {
+                            this.ctx.fillStyle = palette[colorIdx];
+                            this.ctx.fillRect(c * this.cellSize, r * this.cellSize, this.cellSize, this.cellSize);
+                        }
+                    }
+                }
+
+                for (const p of this.particles) {
+                    this.ctx.fillStyle = p.color;
+                    this.ctx.shadowColor = p.color;
+                    this.ctx.shadowBlur = 3;
+                    this.ctx.beginPath();
+                    this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    this.ctx.shadowBlur = 0;
+                }
+            }
+
+            checkVictory() {
+                if (this.remainingSandCount <= 0 && !this.isWin) {
+                    this.isWin = true;
+                    sound.playWin();
+                    setTimeout(() => {
+                        this.showWinModal();
+                    }, 400);
+                }
+            }
+
+            checkGameOver() {
+                if (this.isWin || this.isGameOver) return;
+
+                // Safety Guard: Never trigger game over if particles are flying or buckets remain in tray to auto-refill
+                if (this.particles.length > 0) return;
+
+                // If any slot is empty and there are buckets left in the tray, don't trigger game over
+                const hasEmptySlot = this.slots.some(s => s === null);
+                if (hasEmptySlot && this.buckets.length > 0) return;
+
+                // Game over only occurs when all 5 slots are occupied with non-matching buckets and no absorption can happen
+                const slotsFull = this.slots.every(s => s !== null);
+                if (!slotsFull) return;
+
+                const exposedColors = new Set();
+                for (let c = 0; c < GRID_COLS; c++) {
+                    let bottomRow = -1;
+                    for (let r = GRID_ROWS - 1; r >= 0; r--) {
+                        if (this.grid[r][c] !== -1) {
+                            bottomRow = r;
+                            break;
+                        }
+                    }
+                    if (bottomRow !== -1) {
+                        const searchTop = Math.max(0, bottomRow - SEARCH_DEPTH + 1);
+                        for (let r = bottomRow; r >= searchTop; r--) {
+                            if (this.grid[r][c] !== -1) {
+                                exposedColors.add(this.grid[r][c]);
+                            }
+                        }
+                    }
+                }
+
+                const canAbsorb = this.slots.some(bucket => bucket && exposedColors.has(bucket.colorIndex));
+
+                if (!canAbsorb) {
+                    this.isGameOver = true;
+                    sound.playLose();
+                    setTimeout(() => {
+                        this.showLoseModal();
+                    }, 500);
+                }
+            }
+
+            selectBucketByColor(colorIndex) {
+                if (this.isGameOver || this.isWin) return;
+
+                const emptySlotIdx = this.slots.findIndex(s => s === null);
+                if (emptySlotIdx === -1) return;
+
+                const bucketIdx = this.buckets.findIndex(b => b.colorIndex === colorIndex);
+                if (bucketIdx === -1) return;
+
+                const [selectedBucket] = this.buckets.splice(bucketIdx, 1);
+                this.slots[emptySlotIdx] = selectedBucket;
+
+                sound.playPop();
+
+                this.renderTray();
+                this.renderSlots();
+                this.updateUI();
+            }
+
+            renderTray() {
+                const tray = document.getElementById('bucketTray');
+                tray.innerHTML = '';
+
+                const stage = STAGES[this.currentStageIndex];
+
+                if (this.buckets.length === 0) {
+                    tray.innerHTML = `<span class="text-xs text-stone-500 italic py-2 m-auto">すべてのバケツが配置されました</span>`;
+                    return;
+                }
+
+                const grouped = {};
+                this.buckets.forEach(b => {
+                    if (!grouped[b.colorIndex]) {
+                        grouped[b.colorIndex] = 0;
+                    }
+                    grouped[b.colorIndex]++;
+                });
+
+                Object.keys(grouped).forEach(cIdx => {
+                    const colorIndex = parseInt(cIdx);
+                    const count = grouped[colorIndex];
+                    const colorHex = stage.palette[colorIndex];
+                    const colorName = stage.paletteNames[colorIndex];
+
+                    const btn = document.createElement('button');
+                    btn.className = `bucket-card relative flex items-center gap-2 px-3 py-2 rounded-xl border border-stone-700/80 bg-stone-900/90 text-amber-100 shadow-md hover:border-amber-500/60 active:scale-95 transition flex-shrink-0 cursor-pointer`;
+                    btn.onclick = () => this.selectBucketByColor(colorIndex);
+
+                    btn.innerHTML = `
+                        <div class="w-6 h-6 rounded-lg border border-white/20 shadow-inner flex items-center justify-center text-xs font-bold flex-shrink-0" style="background-color: ${colorHex}">
+                            <i class="fa-solid fa-bucket text-white/80 drop-shadow"></i>
+                        </div>
+                        <div class="flex flex-col text-left">
+                            <span class="text-[10px] text-stone-400 font-medium leading-none mb-1">${colorName}</span>
+                            <span class="text-xs font-mono font-bold text-amber-300">×${count}</span>
+                        </div>
+                    `;
+                    tray.appendChild(btn);
+                });
+            }
+
+            renderSlots() {
+                const stage = STAGES[this.currentStageIndex];
+
+                for (let i = 0; i < 5; i++) {
+                    const slotElem = document.getElementById(`slot-${i}`);
+                    if (!slotElem) continue;
+
+                    const bucket = this.slots[i];
+
+                    // Keep existing popOverlay elements if animating
+                    const popOverlay = slotElem.querySelector('.animate-pop-out');
+
+                    if (bucket) {
+                        const colorHex = stage.palette[bucket.colorIndex];
+                        const pct = Math.round((bucket.capacity / bucket.initialCapacity) * 100);
+
+                        slotElem.innerHTML = `
+                            <div class="bucket-container w-full h-full rounded-xl p-1.5 flex flex-col justify-between items-center relative overflow-hidden border border-amber-500/60 shadow-inner" style="background: linear-gradient(180deg, #26201a 0%, #171310 100%)">
+                                <div class="w-full flex justify-between items-center z-10">
+                                    <span class="w-2.5 h-2.5 rounded-full border border-white/40 shadow" style="background-color: ${colorHex}"></span>
+                                </div>
+                                <i class="fa-solid fa-bucket text-xl z-10 my-auto drop-shadow" style="color: ${colorHex}"></i>
+                                <div class="fill-bar absolute bottom-0 left-0 right-0 bg-amber-600/35 transition-all duration-200" style="height: ${pct}%;"></div>
+                            </div>
+                        `;
+                    } else {
+                        slotElem.innerHTML = `<span class="text-xs text-stone-600 font-mono">${i + 1}</span>`;
+                    }
+
+                    if (popOverlay) {
+                        slotElem.appendChild(popOverlay);
+                    }
+                }
+
+                const emptyCount = this.slots.filter(s => s === null).length;
+                document.getElementById('slotStatus').innerText = `空き: ${emptyCount}/5`;
+            }
+
+            updateSlotUI(slotIndex) {
+                const bucket = this.slots[slotIndex];
+                if (!bucket) return;
+
+                const slotElem = document.getElementById(`slot-${slotIndex}`);
+                const pct = Math.round((bucket.capacity / bucket.initialCapacity) * 100);
+
+                const barElem = slotElem.querySelector('.fill-bar');
+                if (barElem) barElem.style.height = `${pct}%`;
+            }
+
+            updateUI() {
+                document.getElementById('sandRemaining').innerText = this.remainingSandCount;
+                document.getElementById('sandTotal').innerText = this.totalSandCount;
+
+                const progressPct = Math.round(((this.totalSandCount - this.remainingSandCount) / this.totalSandCount) * 100);
+                document.getElementById('progressBar').style.width = `${progressPct}%`;
+            }
+
+            showWinModal() {
+                document.getElementById('modalOverlay').classList.remove('hidden');
+                document.getElementById('modalOverlay').classList.add('flex');
+                document.getElementById('winModal').classList.remove('hidden');
+                document.getElementById('winModal').classList.add('flex');
+
+                const preview = document.getElementById('winPaintingPreview');
+                preview.innerHTML = '';
+                const miniCanvas = document.createElement('canvas');
+                miniCanvas.width = GRID_COLS * 3;
+                miniCanvas.height = GRID_ROWS * 3;
+                const mctx = miniCanvas.getContext('2d');
+
+                const stage = STAGES[this.currentStageIndex];
+                for (let r = 0; r < GRID_ROWS; r++) {
+                    for (let c = 0; c < GRID_COLS; c++) {
+                        const colorIdx = stage.generator(r, c);
+                        mctx.fillStyle = stage.palette[colorIdx];
+                        mctx.fillRect(c * 3, r * 3, 3, 3);
+                    }
+                }
+                preview.appendChild(miniCanvas);
+            }
+
+            showLoseModal() {
+                document.getElementById('modalOverlay').classList.remove('hidden');
+                document.getElementById('modalOverlay').classList.add('flex');
+                document.getElementById('loseModal').classList.remove('hidden');
+                document.getElementById('loseModal').classList.add('flex');
+            }
+
+            hideModals() {
+                document.getElementById('modalOverlay').classList.add('hidden');
+                document.getElementById('modalOverlay').classList.remove('flex');
+                document.getElementById('stageModal').classList.add('hidden');
+                document.getElementById('helpModal').classList.add('hidden');
+                document.getElementById('winModal').classList.add('hidden');
+                document.getElementById('loseModal').classList.add('hidden');
+            }
+
+            initEventListeners() {
+                document.getElementById('btnSound').addEventListener('click', () => {
+                    sound.enabled = !sound.enabled;
+                    document.getElementById('soundIcon').className = sound.enabled ? 'fa-solid fa-volume-high text-sm' : 'fa-solid fa-volume-xmark text-sm text-stone-500';
+                });
+
+                document.getElementById('btnHelp').addEventListener('click', () => {
+                    this.hideModals();
+                    document.getElementById('modalOverlay').classList.remove('hidden');
+                    document.getElementById('modalOverlay').classList.add('flex');
+                    document.getElementById('helpModal').classList.remove('hidden');
+                    document.getElementById('helpModal').classList.add('flex');
+                });
+
+                document.getElementById('btnStageSelect').addEventListener('click', () => {
+                    this.openStageModal();
+                });
+
+                document.getElementById('btnResetLevel').addEventListener('click', () => {
+                    this.initStage(this.currentStageIndex);
+                });
+
+                document.getElementById('btnRetry').addEventListener('click', () => {
+                    this.hideModals();
+                    this.initStage(this.currentStageIndex);
+                });
+
+                document.getElementById('btnNextStage').addEventListener('click', () => {
+                    this.hideModals();
+                    const nextIdx = (this.currentStageIndex + 1) % STAGES.length;
+                    this.initStage(nextIdx);
+                });
+
+                document.querySelectorAll('.modalClose').forEach(btn => {
+                    btn.addEventListener('click', () => this.hideModals());
+                });
+
+                window.addEventListener('resize', () => {
+                    if (!this.canvas) return;
+                    const maxCanvasWidth = Math.min(window.innerWidth - 32, 360);
+                    this.cellSize = Math.max(4, Math.floor(maxCanvasWidth / GRID_COLS));
+                    this.canvas.width = GRID_COLS * this.cellSize;
+                    this.canvas.height = GRID_ROWS * this.cellSize;
+                    this.drawCanvas();
+                });
+            }
+
+            openStageModal() {
+                this.hideModals();
+                const stageList = document.getElementById('stageList');
+                stageList.innerHTML = '';
+
+                STAGES.forEach((st, idx) => {
+                    const item = document.createElement('div');
+                    item.className = `p-3 rounded-2xl border ${idx === this.currentStageIndex ? 'border-amber-500 bg-amber-900/40' : 'border-stone-700 bg-stone-900/60'} hover:border-amber-400 cursor-pointer flex items-center gap-3 transition`;
+                    
+                    const paletteHTML = st.palette.map(c => `<span class="w-3 h-3 rounded-full inline-block border border-black/20" style="background-color:${c}"></span>`).join('');
+
+                    item.innerHTML = `
+                        <div class="w-9 h-9 rounded-xl bg-amber-950 border border-amber-600/40 flex items-center justify-center font-serif text-amber-300 font-bold text-xs">
+                            ${idx + 1}
+                        </div>
+                        <div class="flex flex-col flex-1">
+                            <span class="text-xs font-bold text-amber-100">${st.title}</span>
+                            <span class="text-[10px] text-stone-400">${st.author}</span>
+                            <div class="flex gap-1 mt-1">${paletteHTML}</div>
+                        </div>
+                    `;
+
+                    item.onclick = () => {
+                        this.hideModals();
+                        this.initStage(idx);
+                    };
+
+                    stageList.appendChild(item);
+                });
+
+                document.getElementById('modalOverlay').classList.remove('hidden');
+                document.getElementById('modalOverlay').classList.add('flex');
+                document.getElementById('stageModal').classList.remove('hidden');
+                document.getElementById('stageModal').classList.add('flex');
+            }
+        }
+
+        let game = null;
+        window.addEventListener('load', () => {
+            game = new SandLoopGame();
+            if (game.canvas) {
+                game.initStage(0);
+            }
+        });
+    </script>
+</body>
+</html>
