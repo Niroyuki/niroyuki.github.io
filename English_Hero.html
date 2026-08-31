@@ -146,15 +146,15 @@
                     </button>
                     <button onclick="game.startBattle('grade1')" class="pixel-btn bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-5 rounded text-center text-xs md:text-sm flex items-center justify-between gap-3">
                         <span class="font-pixel text-emerald-200">NORMAL</span>
-                        <span>🌱 (中学1年生レベル)</span>
+                        <span>🌱 (中1・英検5級)</span>
                     </button>
                     <button onclick="game.startBattle('grade2')" class="pixel-btn bg-sky-600 hover:bg-sky-500 text-white font-bold py-2.5 px-5 rounded text-center text-xs md:text-sm flex items-center justify-between gap-3">
                         <span class="font-pixel text-sky-200">HARD</span>
-                        <span>⚔️ (中学2年生レベル)</span>
+                        <span>⚔️ (中2・英検4級)</span>
                     </button>
                     <button onclick="game.startBattle('gradeAll')" class="pixel-btn bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 px-5 rounded text-center text-xs md:text-sm flex items-center justify-between gap-3">
                         <span class="font-pixel text-purple-200">EXPERT</span>
-                        <span>👑 (中学全般レベル)</span>
+                        <span>👑 (中3・英検3級)</span>
                     </button>
                 </div>
             </div>
@@ -283,7 +283,10 @@
                 
                 <!-- 出題英単語 -->
                 <div class="text-center bg-slate-950 py-4 px-2 rounded-lg border-2 border-slate-800">
-                    <div class="text-xs text-amber-400 font-bold mb-1">この英単語の意味は？</div>
+                    <div class="flex items-center justify-between px-3 mb-1">
+                        <div class="text-xs text-amber-400 font-bold">この英単語の意味は？</div>
+                        <div id="review-tag" class="hidden text-[10px] bg-rose-900/80 text-rose-200 border border-rose-700 px-2 py-0.5 rounded">🔄 復元・再出題問題</div>
+                    </div>
                     <div id="question-word" class="text-2xl md:text-4xl font-extrabold text-white tracking-wide font-mono">
                         apple
                     </div>
@@ -316,7 +319,7 @@
                 <!-- スコア詳細テーブル -->
                 <div class="bg-slate-950 p-4 rounded-lg border-2 border-slate-800 max-w-md mx-auto text-left space-y-2 text-sm">
                     <div class="flex justify-between text-slate-300">
-                        <span>正解数:</span>
+                        <span>初見正解数:</span>
                         <span id="res-correct" class="font-mono text-white font-bold">10 / 10</span>
                     </div>
                     <div class="flex justify-between text-slate-300">
@@ -446,15 +449,17 @@
 
     <!-- ゲームロジック & ドット絵描画エンジン -->
     <script>
-        // 英単語データベース (4つの難易度レベル)
+        // 英単語データベース (英検準拠 4つの難易度レベル)
         const WORD_DATABASE = {
-            // 🎒 EASY (小学生レベル)
+            // 🎒 EASY (小学生レベル：英検5級の日常語＋基本単語)
             elem: [
                 { word: "apple", meaning: "りんご", pos: "名詞" },
                 { word: "dog", meaning: "犬", pos: "名詞" },
                 { word: "cat", meaning: "猫", pos: "名詞" },
                 { word: "book", meaning: "本", pos: "名詞" },
                 { word: "pen", meaning: "ペン", pos: "名詞" },
+                { word: "desk", meaning: "つくえ", pos: "名詞" },
+                { word: "chair", meaning: "いす", pos: "名詞" },
                 { word: "red", meaning: "赤・赤い", pos: "形容詞・名詞" },
                 { word: "blue", meaning: "青・青い", pos: "形容詞・名詞" },
                 { word: "yellow", meaning: "黄色・黄色の", pos: "形容詞・名詞" },
@@ -466,21 +471,22 @@
                 { word: "milk", meaning: "牛乳・ミルク", pos: "名詞" },
                 { word: "bird", meaning: "鳥", pos: "名詞" },
                 { word: "fish", meaning: "魚", pos: "名詞" },
-                { word: "desk", meaning: "つくえ", pos: "名詞" },
-                { word: "chair", meaning: "いす", pos: "名詞" },
                 { word: "music", meaning: "音楽", pos: "名詞" },
-                { word: "box", meaning: "箱・ボックス", pos: "名詞" }
+                { word: "box", meaning: "箱・ボックス", pos: "名詞" },
+                { word: "friend", meaning: "友達", pos: "名詞" },
+                { word: "hello", meaning: "こんにちは", pos: "間投詞" },
+                { word: "thank", meaning: "感謝する", pos: "動詞" },
+                { word: "food", meaning: "食べ物", pos: "名詞" },
+                { word: "school", meaning: "学校", pos: "名詞" }
             ],
 
-            // 🌱 NORMAL (中学1年生レベル)
+            // 🌱 NORMAL (中1・英検5級レベル)
             grade1: [
                 { word: "like", meaning: "〜が好きである", pos: "動詞" },
                 { word: "play", meaning: "（スポーツや楽器を）する・遊ぶ", pos: "動詞" },
                 { word: "student", meaning: "生徒・学生", pos: "名詞" },
                 { word: "teacher", meaning: "先生・教師", pos: "名詞" },
-                { word: "friend", meaning: "友達", pos: "名詞" },
                 { word: "family", meaning: "家族", pos: "名詞" },
-                { word: "school", meaning: "学校", pos: "名詞" },
                 { word: "study", meaning: "勉強する", pos: "動詞" },
                 { word: "speak", meaning: "（言語を）話す", pos: "動詞" },
                 { word: "everyday", meaning: "毎日・日常の", pos: "副詞・形容詞" },
@@ -493,10 +499,17 @@
                 { word: "breakfast", meaning: "朝食", pos: "名詞" },
                 { word: "listen", meaning: "（耳を傾けて）聴く", pos: "動詞" },
                 { word: "welcome", meaning: "歓迎する・ようこそ", pos: "動詞・間投詞" },
-                { word: "practice", meaning: "練習する", pos: "動詞" }
+                { word: "practice", meaning: "練習する", pos: "動詞" },
+                { word: "answer", meaning: "答える", pos: "動詞" },
+                { word: "clean", meaning: "掃除する・きれいな", pos: "動詞・形容詞" },
+                { word: "enjoy", meaning: "楽しむ", pos: "動詞" },
+                { word: "station", meaning: "駅", pos: "名詞" },
+                { word: "street", meaning: "通り・街頭", pos: "名詞" },
+                { word: "yesterday", meaning: "昨日", pos: "副詞・名詞" },
+                { word: "tomorrow", meaning: "明日", pos: "副詞・名詞" }
             ],
 
-            // ⚔️ HARD (中学2年生レベル)
+            // ⚔️ HARD (中2・英検4級レベル)
             grade2: [
                 { word: "difficult", meaning: "難しい", pos: "形容詞" },
                 { word: "remember", meaning: "思い出す・覚えている", pos: "動詞" },
@@ -517,10 +530,15 @@
                 { word: "foreign", meaning: "外国の", pos: "形容詞" },
                 { word: "continue", meaning: "続ける・続く", pos: "動詞" },
                 { word: "protect", meaning: "保護する・守る", pos: "動詞" },
-                { word: "different", meaning: "異なる・違う", pos: "形容詞" }
+                { word: "different", meaning: "異なる・違う", pos: "形容詞" },
+                { word: "popular", meaning: "人気のある", pos: "形容詞" },
+                { word: "reason", meaning: "理由", pos: "名詞" },
+                { word: "subject", meaning: "教科・科目", pos: "名詞" },
+                { word: "invite", meaning: "招待する", pos: "動詞" },
+                { word: "festival", meaning: "お祭り", pos: "名詞" }
             ],
 
-            // 👑 EXPERT (中学全般レベル)
+            // 👑 EXPERT (中3・英検3級レベル)
             gradeAll: [
                 { word: "environment", meaning: "環境", pos: "名詞" },
                 { word: "convenient", meaning: "便利な", pos: "形容詞" },
@@ -541,7 +559,12 @@
                 { word: "succeed", meaning: "成功する", pos: "動詞" },
                 { word: "improve", meaning: "改善する・向上させる", pos: "動詞" },
                 { word: "knowledge", meaning: "知識", pos: "名詞" },
-                { word: "valuable", meaning: "価値のある・貴重な", pos: "形容詞" }
+                { word: "valuable", meaning: "価値のある・貴重な", pos: "形容詞" },
+                { word: "advantage", meaning: "利点・強み", pos: "名詞" },
+                { word: "suggest", meaning: "提案する", pos: "動詞" },
+                { word: "encourage", meaning: "励ます・勇気づける", pos: "動詞" },
+                { word: "relationship", meaning: "人間関係・関係", pos: "名詞" },
+                { word: "atmosphere", meaning: "雰囲気・大気", pos: "名詞" }
             ]
         };
 
@@ -661,9 +684,15 @@
                 this.enemyHp = 50;
                 this.enemyMaxHp = 50;
                 this.score = 0;
+                this.firstTryCorrectCount = 0; // 初見での正解数
                 this.combo = 0;
 
+                // 問題キュー（重複防止＋復習機能用）
+                this.questionQueue = [];
+                this.reviewQueue = [];
                 this.currentQuestion = null;
+                this.isCurrentQuestionReview = false;
+
                 this.timer = null;
                 this.timeLeft = 100;
 
@@ -906,11 +935,27 @@
                 this.updateUI();
             }
 
+            // 出題用キューの初期化（かぶりのないシャッフルリスト）
+            initQuestionQueues(stageKey) {
+                const fullList = [...WORD_DATABASE[stageKey]];
+                // フィッシャー–イェーツのシャッフル
+                for (let i = fullList.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [fullList[i], fullList[j]] = [fullList[j], fullList[i]];
+                }
+                this.questionQueue = fullList;
+                this.reviewQueue = [];
+            }
+
             startBattle(stage) {
                 this.currentStage = stage;
                 this.wave = 1;
                 this.score = 0;
+                this.firstTryCorrectCount = 0;
                 this.combo = 0;
+
+                // 単語山札の初期化
+                this.initQuestionQueues(stage);
 
                 const stats = this.getStats();
                 this.playerHp = stats.hp;
@@ -922,9 +967,9 @@
 
                 const stageTitleMap = { 
                     elem: "EASY (小学生レベル)",
-                    grade1: "NORMAL (中学1年生レベル)", 
-                    grade2: "HARD (中学2年生レベル)", 
-                    gradeAll: "EXPERT (中学全般レベル)" 
+                    grade1: "NORMAL (中1・英検5級)", 
+                    grade2: "HARD (中2・英検4級)", 
+                    gradeAll: "EXPERT (中3・英検3級)" 
                 };
                 document.getElementById('battle-stage-name').innerText = stageTitleMap[stage];
 
@@ -975,16 +1020,42 @@
             nextQuestion() {
                 clearInterval(this.timer);
 
-                const list = WORD_DATABASE[this.currentStage];
-                const qObj = list[Math.floor(Math.random() * list.length)];
+                let qObj = null;
+                this.isCurrentQuestionReview = false;
+
+                // 1. 未出題の単語キューがあれば優先使用
+                if (this.questionQueue.length > 0) {
+                    qObj = this.questionQueue.shift();
+                } 
+                // 2. 未出題が尽き、間違えた復習キューがあれば再出題（終盤での復習）
+                else if (this.reviewQueue.length > 0) {
+                    qObj = this.reviewQueue.shift();
+                    this.isCurrentQuestionReview = true;
+                } 
+                // 3. どちらも尽きた場合は、全単語から再度シャッフルして補給
+                else {
+                    this.initQuestionQueues(this.currentStage);
+                    qObj = this.questionQueue.shift();
+                }
+
                 this.currentQuestion = qObj;
 
                 document.getElementById('question-word').innerText = qObj.word;
                 document.getElementById('question-phonetic').innerText = `[${qObj.pos}]`;
 
+                // 復習タグの表示切り替え
+                const reviewTagEl = document.getElementById('review-tag');
+                if (this.isCurrentQuestionReview) {
+                    reviewTagEl.classList.remove('hidden');
+                } else {
+                    reviewTagEl.classList.add('hidden');
+                }
+
+                // 選択肢の生成（正解 + ダミー選択肢3つ）
+                const fullList = WORD_DATABASE[this.currentStage];
                 const choices = [qObj.meaning];
                 while (choices.length < 4) {
-                    const randomWord = list[Math.floor(Math.random() * list.length)];
+                    const randomWord = fullList[Math.floor(Math.random() * fullList.length)];
                     if (!choices.includes(randomWord.meaning)) {
                         choices.push(randomWord.meaning);
                     }
@@ -1040,10 +1111,15 @@
                     const dmg = 25;
                     this.enemyHp -= dmg;
                     this.score += 10 + this.combo * 2;
+                    
+                    if (!this.isCurrentQuestionReview) {
+                        this.firstTryCorrectCount++;
+                    }
+
                     this.combo++;
                     if (this.combo > this.maxStreak) this.maxStreak = this.combo;
 
-                    effectEl.innerText = "HIT! 正解!";
+                    effectEl.innerText = this.isCurrentQuestionReview ? "CLEAR! 復習完了!" : "HIT! 正解!";
                     effectEl.className = "absolute inset-0 pointer-events-none flex items-center justify-center font-bold text-xl md:text-3xl text-emerald-400 z-20 opacity-100 transition-opacity";
 
                 } else {
@@ -1055,6 +1131,11 @@
 
                     this.playerHp -= 20;
                     this.combo = 0;
+
+                    // 間違えた問題を復習キュー（終盤用リスト）に追加
+                    if (!this.reviewQueue.some(item => item.word === this.currentQuestion.word)) {
+                        this.reviewQueue.push(this.currentQuestion);
+                    }
 
                     effectEl.innerText = "MISS! ダメージ!";
                     effectEl.className = "absolute inset-0 pointer-events-none flex items-center justify-center font-bold text-xl md:text-3xl text-rose-500 z-20 opacity-100 transition-opacity";
@@ -1103,7 +1184,7 @@
 
                 this.gold += totalGold;
 
-                document.getElementById('res-correct').innerText = `${this.score / 10} 問`;
+                document.getElementById('res-correct').innerText = `${this.firstTryCorrectCount} 問`;
                 document.getElementById('res-combo').innerText = `${this.combo}`;
                 document.getElementById('res-base-gold').innerText = `+${baseGold} G`;
                 document.getElementById('res-bonus-mult').innerText = `x${stats.mult}`;
