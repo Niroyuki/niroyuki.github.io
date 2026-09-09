@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>一次関数グラフ描画＆変化の割合ツール</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap');
+        body {
+            font-family: 'Inter', 'Noto Sans JP', sans-serif;
+            touch-action: manipulation;
+        }
+        /* キャンバス上のカーソル指定 */
+        .cursor-grab-custom { cursor: grab; }
+        .cursor-grabbing-custom { cursor: grabbing; }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 h-screen flex flex-col overflow-hidden select-none">
+
+    <!-- ヘッダー -->
+    <header class="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shrink-0 shadow-sm z-10">
+        <div class="flex items-center space-x-3">
+            <div class="bg-indigo-600 text-white p-2 rounded-lg shadow-sm">
+                <i data-lucide="line-chart" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-slate-800 leading-tight">一次関数・二次関数・反比例 グラフ描画＆変化の割合ツール</h1>
+                <p class="text-xs text-slate-500 hidden sm:block">変域調整・格子点スナップ・直線/放物線/双曲線（反比例）対応</p>
+            </div>
+        </div>
+        
+        <div class="flex items-center space-x-2">
+            <button id="btn-reset-all" class="flex items-center space-x-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg font-medium transition border border-slate-300">
+                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                <span>リセット</span>
+            </button>
+            <button id="btn-help" class="flex items-center space-x-1 text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-2 rounded-lg font-medium transition border border-indigo-200">
+                <i data-lucide="help-circle" class="w-3.5 h-3.5"></i>
+                <span>使い方</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <div class="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+        
+        <!-- コントロールパネル（左側） -->
+        <aside class="w-full md:w-80 lg:w-96 bg-white border-r border-slate-200 flex flex-col overflow-y-auto shrink-0 z-10 max-h-[45vh] md:max-h-full shadow-md md:shadow-none">
+            
+            <div class="p-4 space-y-5">
+                
+                <!-- 1. 表示範囲（変域）設定 -->
+                <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                    <h2 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2.5 flex items-center justify-between">
+                        <span>表示範囲（変域）の設定</span>
+                        <i data-lucide="maximize-2" class="w-3.5 h-3.5 text-slate-400"></i>
+                    </h2>
+                    
+                    <div class="grid grid-cols-2 gap-3 text-xs">
+                        <!-- xの変域 -->
+                        <div class="space-y-1.5 bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm">
+                            <span class="font-bold text-indigo-600 block border-b border-slate-100 pb-1">X の変域</span>
+                            <div class="flex items-center space-x-1 pt-1">
+                                <input type="number" id="xmin" value="-10" step="1" class="w-full bg-slate-50 border border-slate-300 rounded px-1.5 py-1 text-center font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                <span class="text-slate-400">≦x≦</span>
+                                <input type="number" id="xmax" value="10" step="1" class="w-full bg-slate-50 border border-slate-300 rounded px-1.5 py-1 text-center font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                            </div>
+                        </div>
+                        
+                        <!-- yの変域 -->
+                        <div class="space-y-1.5 bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm">
+                            <span class="font-bold text-emerald-600 block border-b border-slate-100 pb-1">Y の変域</span>
+                            <div class="flex items-center space-x-1 pt-1">
+                                <input type="number" id="ymin" value="-10" step="1" class="w-full bg-slate-50 border border-slate-300 rounded px-1.5 py-1 text-center font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                <span class="text-slate-400">≦y≦</span>
+                                <input type="number" id="ymax" value="10" step="1" class="w-full bg-slate-50 border border-slate-300 rounded px-1.5 py-1 text-center font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. 関数の式入力（3種類） -->
+                <div class="space-y-2.5">
+                    <h2 class="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                        <span>関数の式（一次・二次・反比例）</span>
+                        <span class="text-[10px] text-slate-400 font-normal">例: 2x+1, -x^2+4, 6/x</span>
+                    </h2>
+
+                    <!-- 式 1 -->
+                    <div class="flex items-center space-x-2 bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
+                        <input type="checkbox" id="fn1-enable" checked class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500">
+                        <div class="w-3.5 h-3.5 rounded-full bg-blue-500 shrink-0"></div>
+                        <span class="text-xs font-bold text-slate-600 font-mono">y =</span>
+                        <input type="text" id="fn1-expr" value="2x + 1" placeholder="例: 2x + 1" class="flex-1 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    </div>
+
+                    <!-- 式 2 -->
+                    <div class="flex items-center space-x-2 bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
+                        <input type="checkbox" id="fn2-enable" checked class="w-4 h-4 rounded text-rose-600 focus:ring-rose-500">
+                        <div class="w-3.5 h-3.5 rounded-full bg-rose-500 shrink-0"></div>
+                        <span class="text-xs font-bold text-slate-600 font-mono">y =</span>
+                        <input type="text" id="fn2-expr" value="6/x" placeholder="例: 6/x" class="flex-1 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1 text-sm font-mono focus:ring-2 focus:ring-rose-500 focus:outline-none">
+                    </div>
+
+                    <!-- 式 3 -->
+                    <div class="flex items-center space-x-2 bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
+                        <input type="checkbox" id="fn3-enable" class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500">
+                        <div class="w-3.5 h-3.5 rounded-full bg-emerald-500 shrink-0"></div>
+                        <span class="text-xs font-bold text-slate-600 font-mono">y =</span>
+                        <input type="text" id="fn3-expr" value="-x^2 + 4" placeholder="例: -x^2 + 4" class="flex-1 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1 text-sm font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <!-- 3. インタラクティブツール（点・矢印設置） -->
+                <div class="space-y-2.5 pt-1 border-t border-slate-200">
+                    <h2 class="text-xs font-bold text-slate-500 uppercase tracking-wider">画面上の学習補助ツール</h2>
+                    
+                    <div class="grid grid-cols-1 gap-2">
+                        <!-- 吸着点追加 -->
+                        <button id="add-point-btn" class="flex items-center justify-between bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 px-3 py-2 rounded-xl text-xs font-semibold transition shadow-sm">
+                            <div class="flex items-center space-x-2">
+                                <div class="w-2.5 h-2.5 rounded-full bg-amber-500 ring-2 ring-amber-300"></div>
+                                <span>点を設置</span>
+                            </div>
+                            <i data-lucide="plus-circle" class="w-4 h-4 text-amber-600"></i>
+                        </button>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <!-- 横矢印追加 -->
+                            <button id="add-h-arrow-btn" class="flex items-center justify-center space-x-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 px-2.5 py-2 rounded-xl text-xs font-semibold transition shadow-sm">
+                                <i data-lucide="move-horizontal" class="w-4 h-4 text-indigo-600"></i>
+                                <span>横向き矢印</span>
+                            </button>
+
+                            <!-- 縦矢印追加 -->
+                            <button id="add-v-arrow-btn" class="flex items-center justify-center space-x-1.5 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 px-2.5 py-2 rounded-xl text-xs font-semibold transition shadow-sm">
+                                <i data-lucide="move-vertical" class="w-4 h-4 text-purple-600"></i>
+                                <span>縦向き矢印</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 設置要素リスト・管理 -->
+                <div class="space-y-2 pt-1 border-t border-slate-200">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-xs font-bold text-slate-500 uppercase tracking-wider">設置中のアイテム</h2>
+                        <button id="btn-clear-tools" class="text-[11px] text-rose-600 hover:text-rose-800 font-medium">すべて消去</button>
+                    </div>
+                    
+                    <div id="items-list" class="space-y-1.5 max-h-36 overflow-y-auto pr-1 text-xs">
+                        <div class="text-slate-400 text-center py-2 text-[11px] italic">アイテムはまだ配置されていません</div>
+                    </div>
+                </div>
+
+            </div>
+        </aside>
+
+        <!-- グラフ描画エリア（メイン） -->
+        <main class="flex-1 bg-slate-200 relative flex flex-col items-center justify-center overflow-hidden">
+            <!-- Canvas -->
+            <canvas id="graphCanvas" class="w-full h-full block cursor-grab-custom bg-white"></canvas>
+
+            <!-- 操作補助ガイドオーバーレイ -->
+            <div class="absolute bottom-3 right-3 bg-white/90 backdrop-blur-md text-slate-700 text-[11px] px-3 py-1.5 rounded-lg border border-slate-200 pointer-events-none shadow-md flex items-center space-x-2">
+                <i data-lucide="mouse-pointer" class="w-3.5 h-3.5 text-indigo-600"></i>
+                <span>点や矢印の端点をドラッグすると格子点（整数座標）にピタッと吸着します</span>
+            </div>
+        </main>
+    </div>
+
+    <!-- モーダル：使い方ガイド -->
+    <div id="help-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-800 text-base flex items-center space-x-2">
+                    <i data-lucide="book-open" class="w-5 h-5 text-indigo-600"></i>
+                    <span>アプリの使い方・学習での活用法</span>
+                </h3>
+                <button id="close-modal-btn" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            
+            <div class="text-xs text-slate-600 space-y-3 leading-relaxed max-h-[60vh] overflow-y-auto pr-1">
+                <div class="bg-indigo-50 p-3 rounded-xl border border-indigo-100">
+                    <h4 class="font-bold text-indigo-900 mb-1">1. 変域（表示範囲）の変更</h4>
+                    <p>左パネルの「Xの変域」「Yの変域」数値を変更すると、目盛りとグラフの表示範囲が広がったり縮んだりします。</p>
+                </div>
+
+                <div class="bg-emerald-50 p-3 rounded-xl border border-emerald-100">
+                    <h4 class="font-bold text-emerald-900 mb-1">2. 式の入力方法（一次・二次・反比例対応）</h4>
+                    <p>・一次関数 $y = ax + b$、二次関数 $y = ax^2 + bx + c$、反比例 $y = \frac{a}{x}$ に対応しています。<br>
+                       ・`2x + 1`, `-x^2 + 4`, `6/x`, `-12/x`, `1/2x^2 - 3` などの数学表記に対応しています。</p>
+                </div>
+
+                <div class="bg-amber-50 p-3 rounded-xl border border-amber-100">
+                    <h4 class="font-bold text-amber-900 mb-1">3. 格子点吸着点（スナップ機能）</h4>
+                    <p>ボタンを押すとキャンバスに点が出現します。マウスやタッチで移動させると、**自動的に最も近い整数座標（格子点）に吸い付きます**。座標がリアルタイム表示されます。</p>
+                </div>
+
+                <div class="bg-purple-50 p-3 rounded-xl border border-purple-100">
+                    <h4 class="font-bold text-purple-900 mb-1">4. 横向き・縦向き矢印（変化の割合）</h4>
+                    <p>・横向き矢印：「$x$ の増加量（右への進み）」<br>
+                       ・縦向き矢印：「$y$ の増加量（上・下への進み）」<br>
+                       両端の丸いハンドルをドラッグして格子点に配置することで、「右に2進むと上に1進む」といった傾きの説明が視覚的に行えます。</p>
+                </div>
+            </div>
+
+            <button id="confirm-modal-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl text-xs transition shadow-md">
+                理解しました
+            </button>
+        </div>
+    </div>
+
+    <!-- JavaScript ロジック -->
+    <script>
+        // アイコンの初期化
+        lucide.createIcons();
+
+        // 状態変数
+        const state = {
+            xmin: -10,
+            xmax: 10,
+            ymin: -10,
+            ymax: 10,
+            functions: [
+                { id: 1, expr: '2x + 1', color: '#2563eb', enabled: true },
+                { id: 2, expr: '6/x', color: '#e11d48', enabled: true },
+                { id: 3, expr: '-x^2 + 4', color: '#059669', enabled: false }
+            ],
+            points: [
+                { id: 'p1', x: 2, y: 3, color: '#d97706', label: '点A' }
+            ],
+            arrows: [
+                { id: 'a1', type: 'h', x1: 0, x2: 2, y: 1, color: '#4f46e5' },
+                { id: 'a2', type: 'v', x: 2, y1: 1, y2: 5, color: '#9333ea' }
+            ],
+            // インタラクション用
+            dragTarget: null
+        };
+
+        // DOM要素
+        const canvas = document.getElementById('graphCanvas');
+        const ctx = canvas.getContext('2d');
+        const xminInput = document.getElementById('xmin');
+        const xmaxInput = document.getElementById('xmax');
+        const yminInput = document.getElementById('ymin');
+        const ymaxInput = document.getElementById('ymax');
+
+        /**
+         * 中学校・高校数学スタイルの数式文字列をJavaScriptで評価可能な関数に変換
+         * 対応例: "2x + 1", "-x^2 + 4", "1/2x^2 - 3", "(x-2)^2 + 1"
+         */
+        function parseMathExpression(exprStr) {
+            if (!exprStr || !exprStr.trim()) return null;
+            let str = exprStr.replace(/\s+/g, '').toLowerCase();
+            if (str.startsWith('y=')) str = str.substring(2);
+
+            try {
+                // 1. 2乗の記号 (² -> ^2) を標準化
+                str = str.replace(/²/g, '^2');
+
+                // 2. 分数のカッコ括り (例: -1/2 -> (-1/2))
+                str = str.replace(/(-?\d+)\/(\d+)/g, '($1/$2)');
+
+                // 3. カッコ付き2乗の変換: (式)^2 -> Math.pow(式, 2)
+                str = str.replace(/\(([^)]+)\)\^2/g, 'Math.pow($1, 2)');
+
+                // 4. 単独xの2乗の変換: x^2 -> Math.pow(x, 2)
+                str = str.replace(/x\^2/g, 'Math.pow(x, 2)');
+
+                // 5. 係数やカッコの直後の乗算記号(*)を補完 (例: 2x -> 2*x, 2Math -> 2*Math)
+                str = str.replace(/(\d|\))([x\(M])/g, '$1*$2');
+
+                // 6. -x や -Math.pow 等の先頭・符号つき項の乗算記号補完
+                str = str.replace(/(^|[+\-*/(])-x/g, '$1-1*x');
+                str = str.replace(/(^|[+\-*/(])\+x/g, '$1+1*x');
+                str = str.replace(/(^|[+\-*/(])x/g, '$1 1*x');
+
+                str = str.replace(/(^|[+\-*/(])-Math/g, '$1-1*Math');
+                str = str.replace(/(^|[+\-*/(])\+Math/g, '$1+1*Math');
+
+                // 安全な評価用関数の作成
+                const fn = new Function('x', `return ${str};`);
+                // テスト評価
+                const testVal = fn(1);
+                if (typeof testVal !== 'number' || isNaN(testVal)) return null;
+
+                return fn;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function worldToScreen(wx, wy) {
+            const w = canvas.width;
+            const h = canvas.height;
+            const sx = ((wx - state.xmin) / (state.xmax - state.xmin)) * w;
+            const sy = h - ((wy - state.ymin) / (state.ymax - state.ymin)) * h;
+            return { x: sx, y: sy };
+        }
+
+        function screenToWorld(sx, sy) {
+            const w = canvas.width;
+            const h = canvas.height;
+            const wx = state.xmin + (sx / w) * (state.xmax - state.xmin);
+            const wy = state.ymin + ((h - sy) / h) * (state.ymax - state.ymin);
+            return { x: wx, y: wy };
+        }
+
+        function render() {
+            // キャンバスサイズ調整
+            const rect = canvas.parentElement.getBoundingClientRect();
+            if (canvas.width !== rect.width || canvas.height !== rect.height) {
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+            }
+
+            const w = canvas.width;
+            const h = canvas.height;
+
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, w, h);
+
+            // 1. 格子線（グリッド）および目盛りの描画
+            drawGrid(w, h);
+
+            // 2. 関数のグラフ描画
+            drawFunctions(w, h);
+
+            // 3. 矢印オブジェクトの描画
+            drawArrows();
+
+            // 4. 点（吸着点）の描画
+            drawPoints();
+        }
+
+        function drawGrid(w, h) {
+            ctx.lineWidth = 1;
+
+            // 1刻みの格子線
+            const xStep = 1;
+            const yStep = 1;
+
+            // 縦線（x座標）
+            const startX = Math.ceil(state.xmin);
+            const endX = Math.floor(state.xmax);
+
+            for (let x = startX; x <= endX; x += xStep) {
+                const pos = worldToScreen(x, 0);
+                
+                ctx.beginPath();
+                ctx.moveTo(pos.x, 0);
+                ctx.lineTo(pos.x, h);
+
+                if (x === 0) {
+                    // Y軸
+                    ctx.strokeStyle = '#1e293b'; // slate-800
+                    ctx.lineWidth = 2.5;
+                    ctx.stroke();
+
+                    // Y軸矢印
+                    ctx.fillStyle = '#1e293b';
+                    ctx.beginPath();
+                    ctx.moveTo(pos.x, 0);
+                    ctx.lineTo(pos.x - 5, 10);
+                    ctx.lineTo(pos.x + 5, 10);
+                    ctx.fill();
+
+                    // ラベル "y"
+                    ctx.font = 'bold 13px Inter, sans-serif';
+                    ctx.fillStyle = '#1e293b';
+                    ctx.fillText('y', pos.x + 10, 15);
+                } else {
+                    ctx.strokeStyle = '#e2e8f0'; // slate-200
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+
+                    // X軸目盛り数値
+                    const originY = worldToScreen(0, 0).y;
+                    const clampedY = Math.max(15, Math.min(h - 15, originY + 15));
+                    ctx.font = '10px Inter, sans-serif';
+                    ctx.fillStyle = '#64748b'; // slate-500
+                    ctx.textAlign = 'center';
+                    ctx.fillText(x.toString(), pos.x, clampedY);
+                }
+            }
+
+            // 横線（y座標）
+            const startY = Math.ceil(state.ymin);
+            const endY = Math.floor(state.ymax);
+
+            for (let y = startY; y <= endY; y += yStep) {
+                const pos = worldToScreen(0, y);
+
+                ctx.beginPath();
+                ctx.moveTo(0, pos.y);
+                ctx.lineTo(w, pos.y);
+
+                if (y === 0) {
+                    // X軸
+                    ctx.strokeStyle = '#1e293b'; // slate-800
+                    ctx.lineWidth = 2.5;
+                    ctx.stroke();
+
+                    // X軸矢印
+                    ctx.fillStyle = '#1e293b';
+                    ctx.beginPath();
+                    ctx.moveTo(w, pos.y);
+                    ctx.lineTo(w - 10, pos.y - 5);
+                    ctx.lineTo(w - 10, pos.y + 5);
+                    ctx.fill();
+
+                    // ラベル "x"
+                    ctx.font = 'bold 13px Inter, sans-serif';
+                    ctx.fillStyle = '#1e293b';
+                    ctx.fillText('x', w - 15, pos.y - 10);
+                } else {
+                    ctx.strokeStyle = '#e2e8f0'; // slate-200
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+
+                    // Y軸目盛り数値
+                    const originX = worldToScreen(0, 0).x;
+                    const clampedX = Math.max(10, Math.min(w - 20, originX - 12));
+                    ctx.font = '10px Inter, sans-serif';
+                    ctx.fillStyle = '#64748b'; // slate-500
+                    ctx.textAlign = 'right';
+                    ctx.fillText(y.toString(), clampedX, pos.y + 3);
+                }
+            }
+
+            // 原点 "O"
+            const originPos = worldToScreen(0, 0);
+            ctx.font = 'italic bold 12px Inter, sans-serif';
+            ctx.fillStyle = '#1e293b';
+            ctx.textAlign = 'right';
+            ctx.fillText('O', originPos.x - 6, originPos.y + 14);
+        }
+
+        function drawFunctions(w, h) {
+            const yRange = state.ymax - state.ymin;
+            const yMinBound = state.ymin - yRange * 2;
+            const yMaxBound = state.ymax + yRange * 2;
+
+            state.functions.forEach(fnObj => {
+                if (!fnObj.enabled) return;
+
+                const evalFn = parseMathExpression(fnObj.expr);
+                if (!evalFn) return;
+
+                ctx.beginPath();
+                ctx.strokeStyle = fnObj.color;
+                ctx.lineWidth = 3;
+
+                let isDrawing = false;
+                const stepPx = 1.5; // 描画精度向上
+
+                for (let px = 0; px <= w; px += stepPx) {
+                    const wx = screenToWorld(px, 0).x;
+                    const wy = evalFn(wx);
+
+                    // 反比例などの漸近線（画面外に飛ぶ場合）を適切に切断
+                    if (wy !== null && !isNaN(wy) && isFinite(wy) && wy >= yMinBound && wy <= yMaxBound) {
+                        const spos = worldToScreen(wx, wy);
+                        if (!isDrawing) {
+                            ctx.moveTo(spos.x, spos.y);
+                            isDrawing = true;
+                        } else {
+                            ctx.lineTo(spos.x, spos.y);
+                        }
+                    } else {
+                        isDrawing = false;
+                    }
+                }
+                ctx.stroke();
+            });
+        }
+
+        function drawPoints() {
+            state.points.forEach(pt => {
+                const pos = worldToScreen(pt.x, pt.y);
+
+                // 外側のハロー
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, 11, 0, Math.PI * 2);
+                ctx.fillStyle = pt.color + '22';
+                ctx.fill();
+
+                // 本体円
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
+                ctx.fillStyle = pt.color;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.fill();
+                ctx.stroke();
+
+                // 座標表示バッジ（白背景に適合）
+                const labelText = `${pt.label || ''} (${pt.x}, ${pt.y})`;
+                ctx.font = 'bold 11px Inter, sans-serif';
+                const textWidth = ctx.measureText(labelText).width;
+
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+                ctx.strokeStyle = pt.color;
+                ctx.lineWidth = 1.5;
+                
+                const bx = pos.x + 12;
+                const by = pos.y - 22;
+                const bw = textWidth + 12;
+                const bh = 20;
+
+                roundRect(ctx, bx, by, bw, bh, 6, true, true);
+
+                ctx.fillStyle = '#1e293b';
+                ctx.textAlign = 'left';
+                ctx.fillText(labelText, bx + 6, by + 14);
+            });
+        }
+
+        function drawArrows() {
+            state.arrows.forEach(arr => {
+                if (arr.type === 'h') {
+                    // 横向き矢印
+                    const p1 = worldToScreen(arr.x1, arr.y);
+                    const p2 = worldToScreen(arr.x2, arr.y);
+
+                    drawSingleArrow(p1.x, p1.y, p2.x, p2.y, arr.color);
+                    
+                    // 端点ハンドル
+                    drawHandle(p1.x, p1.y, arr.color);
+                    drawHandle(p2.x, p2.y, arr.color);
+                } else if (arr.type === 'v') {
+                    // 縦向き矢印
+                    const p1 = worldToScreen(arr.x, arr.y1);
+                    const p2 = worldToScreen(arr.x, arr.y2);
+
+                    drawSingleArrow(p1.x, p1.y, p2.x, p2.y, arr.color);
+
+                    // 端点ハンドル
+                    drawHandle(p1.x, p1.y, arr.color);
+                    drawHandle(p2.x, p2.y, arr.color);
+                }
+            });
+        }
+
+        function drawSingleArrow(x1, y1, x2, y2, color) {
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.setLineDash([5, 3]); // 破線スタイル
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+            ctx.setLineDash([]); // 実線に戻す
+
+            // 矢印の頭（三角）
+            const headlen = 10;
+            const angle = Math.atan2(y2 - y1, x2 - x1);
+            ctx.beginPath();
+            ctx.fillStyle = color;
+            ctx.moveTo(x2, y2);
+            ctx.lineTo(x2 - headlen * Math.cos(angle - Math.PI / 6), y2 - headlen * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(x2 - headlen * Math.cos(angle + Math.PI / 6), y2 - headlen * Math.sin(angle + Math.PI / 6));
+            ctx.fill();
+        }
+
+        function drawHandle(x, y, color) {
+            ctx.beginPath();
+            ctx.arc(x, y, 5, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+            if (fill) ctx.fill();
+            if (stroke) ctx.stroke();
+        }
+
+        function getMouseWorldPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const sx = clientX - rect.left;
+            const sy = clientY - rect.top;
+            return { sx, sy, ...screenToWorld(sx, sy) };
+        }
+
+        // ドラッグ開始判定
+        function handleStart(e) {
+            const m = getMouseWorldPos(e);
+            const hitRadiusPx = 15;
+
+            // 1. 点の判定
+            for (let pt of state.points) {
+                const sp = worldToScreen(pt.x, pt.y);
+                const dist = Math.hypot(sp.x - m.sx, sp.y - m.sy);
+                if (dist <= hitRadiusPx) {
+                    state.dragTarget = { type: 'point', id: pt.id };
+                    return;
+                }
+            }
+
+            // 2. 矢印のハンドルの判定
+            for (let arr of state.arrows) {
+                if (arr.type === 'h') {
+                    const sp1 = worldToScreen(arr.x1, arr.y);
+                    const sp2 = worldToScreen(arr.x2, arr.y);
+                    if (Math.hypot(sp1.x - m.sx, sp1.y - m.sy) <= hitRadiusPx) {
+                        state.dragTarget = { type: 'arrow-h-start', id: arr.id };
+                        return;
+                    }
+                    if (Math.hypot(sp2.x - m.sx, sp2.y - m.sy) <= hitRadiusPx) {
+                        state.dragTarget = { type: 'arrow-h-end', id: arr.id };
+                        return;
+                    }
+                } else if (arr.type === 'v') {
+                    const sp1 = worldToScreen(arr.x, arr.y1);
+                    const sp2 = worldToScreen(arr.x, arr.y2);
+                    if (Math.hypot(sp1.x - m.sx, sp1.y - m.sy) <= hitRadiusPx) {
+                        state.dragTarget = { type: 'arrow-v-start', id: arr.id };
+                        return;
+                    }
+                    if (Math.hypot(sp2.x - m.sx, sp2.y - m.sy) <= hitRadiusPx) {
+                        state.dragTarget = { type: 'arrow-v-end', id: arr.id };
+                        return;
+                    }
+                }
+            }
+        }
+
+        // ドラッグ移動中（格子点スナップ処理含む）
+        function handleMove(e) {
+            if (!state.dragTarget) return;
+            e.preventDefault();
+
+            const m = getMouseWorldPos(e);
+
+            // 【コア機能】格子点（最も近い整数値）へ吸着（スナップ）
+            const snapX = Math.round(m.x);
+            const snapY = Math.round(m.y);
+
+            const target = state.dragTarget;
+
+            if (target.type === 'point') {
+                const pt = state.points.find(p => p.id === target.id);
+                if (pt) {
+                    pt.x = snapX;
+                    pt.y = snapY;
+                }
+            } else if (target.type === 'arrow-h-start') {
+                const arr = state.arrows.find(a => a.id === target.id);
+                if (arr) {
+                    arr.x1 = snapX;
+                    arr.y = snapY;
+                }
+            } else if (target.type === 'arrow-h-end') {
+                const arr = state.arrows.find(a => a.id === target.id);
+                if (arr) {
+                    arr.x2 = snapX;
+                    arr.y = snapY;
+                }
+            } else if (target.type === 'arrow-v-start') {
+                const arr = state.arrows.find(a => a.id === target.id);
+                if (arr) {
+                    arr.x = snapX;
+                    arr.y1 = snapY;
+                }
+            } else if (target.type === 'arrow-v-end') {
+                const arr = state.arrows.find(a => a.id === target.id);
+                if (arr) {
+                    arr.x = snapX;
+                    arr.y2 = snapY;
+                }
+            }
+
+            render();
+            updateItemsListUI();
+        }
+
+        function handleEnd() {
+            state.dragTarget = null;
+        }
+
+        // イベントリスナー登録（マウス＆タッチ）
+        canvas.addEventListener('mousedown', handleStart);
+        canvas.addEventListener('mousemove', handleMove);
+        window.addEventListener('mouseup', handleEnd);
+
+        canvas.addEventListener('touchstart', handleStart, { passive: false });
+        canvas.addEventListener('touchmove', handleMove, { passive: false });
+        window.addEventListener('touchend', handleEnd);
+
+        // 変域変更
+        function updateBoundsFromUI() {
+            state.xmin = parseFloat(xminInput.value) || -10;
+            state.xmax = parseFloat(xmaxInput.value) || 10;
+            state.ymin = parseFloat(yminInput.value) || -10;
+            state.ymax = parseFloat(ymaxInput.value) || 10;
+            render();
+        }
+
+        [xminInput, xmaxInput, yminInput, ymaxInput].forEach(inp => {
+            inp.addEventListener('change', updateBoundsFromUI);
+            inp.addEventListener('input', updateBoundsFromUI);
+        });
+
+        // 関数入力バインド
+        [1, 2, 3].forEach(id => {
+            const exprInp = document.getElementById(`fn${id}-expr`);
+            const chk = document.getElementById(`fn${id}-enable`);
+
+            const updateFn = () => {
+                const fn = state.functions.find(f => f.id === id);
+                if (fn) {
+                    fn.expr = exprInp.value;
+                    fn.enabled = chk.checked;
+                }
+                render();
+            };
+
+            exprInp.addEventListener('input', updateFn);
+            chk.addEventListener('change', updateFn);
+        });
+
+        // ボタン：点の追加
+        document.getElementById('add-point-btn').addEventListener('click', () => {
+            const newId = 'p_' + Date.now();
+            const labels = ['A', 'B', 'C', 'D', 'E', 'P', 'Q'];
+            const labelStr = '点' + (labels[state.points.length % labels.length]);
+            
+            state.points.push({
+                id: newId,
+                x: 0,
+                y: 0,
+                color: '#f59e0b',
+                label: labelStr
+            });
+            render();
+            updateItemsListUI();
+        });
+
+        // ボタン：横矢印追加
+        document.getElementById('add-h-arrow-btn').addEventListener('click', () => {
+            state.arrows.push({
+                id: 'a_' + Date.now(),
+                type: 'h',
+                x1: -2,
+                x2: 2,
+                y: 0,
+                color: '#6366f1'
+            });
+            render();
+            updateItemsListUI();
+        });
+
+        // ボタン：縦矢印追加
+        document.getElementById('add-v-arrow-btn').addEventListener('click', () => {
+            state.arrows.push({
+                id: 'a_' + Date.now(),
+                type: 'v',
+                x: 0,
+                y1: -2,
+                y2: 2,
+                color: '#a855f7'
+            });
+            render();
+            updateItemsListUI();
+        });
+
+        // アイテムリストのクリア
+        document.getElementById('btn-clear-tools').addEventListener('click', () => {
+            state.points = [];
+            state.arrows = [];
+            render();
+            updateItemsListUI();
+        });
+
+        // 全リセット
+        document.getElementById('btn-reset-all').addEventListener('click', () => {
+            xminInput.value = -10;
+            xmaxInput.value = 10;
+            yminInput.value = -10;
+            ymaxInput.value = 10;
+
+            document.getElementById('fn1-expr').value = '2x + 1';
+            document.getElementById('fn1-enable').checked = true;
+            document.getElementById('fn2-expr').value = '-x^2 + 4';
+            document.getElementById('fn2-enable').checked = true;
+            document.getElementById('fn3-expr').value = '1/2x^2 - 2';
+            document.getElementById('fn3-enable').checked = false;
+
+            state.points = [{ id: 'p1', x: 0, y: 1, color: '#f59e0b', label: '点A' }];
+            state.arrows = [
+                { id: 'a1', type: 'h', x1: 0, x2: 1, y: 1, color: '#6366f1' },
+                { id: 'a2', type: 'v', x: 1, y1: 1, y2: 3, color: '#a855f7' }
+            ];
+
+            updateBoundsFromUI();
+            updateItemsListUI();
+        });
+
+        function updateItemsListUI() {
+            const listContainer = document.getElementById('items-list');
+            listContainer.innerHTML = '';
+
+            if (state.points.length === 0 && state.arrows.length === 0) {
+                listContainer.innerHTML = `<div class="text-slate-400 text-center py-2 text-[11px] italic">アイテムはまだ配置されていません</div>`;
+                return;
+            }
+
+            // 点のリスト項目
+            state.points.forEach(pt => {
+                const item = document.createElement('div');
+                item.className = 'flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-200';
+                item.innerHTML = `
+                    <div class="flex items-center space-x-2">
+                        <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${pt.color}"></span>
+                        <span class="font-bold text-slate-700">${pt.label}</span>
+                        <span class="font-mono text-slate-500">(${pt.x}, ${pt.y})</span>
+                    </div>
+                    <button onclick="removePoint('${pt.id}')" class="text-slate-400 hover:text-rose-600 transition">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    </button>
+                `;
+                listContainer.appendChild(item);
+            });
+
+            // 矢印のリスト項目
+            state.arrows.forEach(arr => {
+                const item = document.createElement('div');
+                item.className = 'flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-200';
+                const isH = arr.type === 'h';
+                const label = isH ? '横向き矢印' : '縦向き矢印';
+
+                item.innerHTML = `
+                    <div class="flex items-center space-x-2">
+                        <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${arr.color}"></span>
+                        <span class="font-medium text-slate-700">${label}</span>
+                    </div>
+                    <button onclick="removeArrow('${arr.id}')" class="text-slate-400 hover:text-rose-600 transition">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    </button>
+                `;
+                listContainer.appendChild(item);
+            });
+
+            lucide.createIcons();
+        }
+
+        window.removePoint = function(id) {
+            state.points = state.points.filter(p => p.id !== id);
+            render();
+            updateItemsListUI();
+        };
+
+        window.removeArrow = function(id) {
+            state.arrows = state.arrows.filter(a => a.id !== id);
+            render();
+            updateItemsListUI();
+        };
+
+        // モーダルイベント
+        const helpModal = document.getElementById('help-modal');
+        document.getElementById('btn-help').addEventListener('click', () => helpModal.classList.remove('hidden'));
+        document.getElementById('close-modal-btn').addEventListener('click', () => helpModal.classList.add('hidden'));
+        document.getElementById('confirm-modal-btn').addEventListener('click', () => helpModal.classList.add('hidden'));
+
+        // ウィンドウリサイズ対応
+        window.addEventListener('resize', render);
+
+        // 初期描画実行
+        window.onload = () => {
+            updateBoundsFromUI();
+            updateItemsListUI();
+            render();
+        };
+    </script>
+</body>
+</html>
