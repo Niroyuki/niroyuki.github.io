@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>一次関数グラフ描画＆変化の割合ツール</title>
+    <title>一次関数・二次関数・反比例 グラフ描画＆変化の割合ツール</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -14,7 +14,6 @@
             font-family: 'Inter', 'Noto Sans JP', sans-serif;
             touch-action: manipulation;
         }
-        /* キャンバス上のカーソル指定 */
         .cursor-grab-custom { cursor: grab; }
         .cursor-grabbing-custom { cursor: grabbing; }
     </style>
@@ -29,7 +28,7 @@
             </div>
             <div>
                 <h1 class="text-lg font-bold text-slate-800 leading-tight">一次関数・二次関数・反比例 グラフ描画＆変化の割合ツール</h1>
-                <p class="text-xs text-slate-500 hidden sm:block">変域調整・格子点スナップ・直線/放物線/双曲線（反比例）対応</p>
+                <p class="text-xs text-slate-500 hidden sm:block">変域調整・格子点スナップ・正方形グリッド・直線/放物線/双曲線対応</p>
             </div>
         </div>
         
@@ -189,7 +188,7 @@
             <div class="text-xs text-slate-600 space-y-3 leading-relaxed max-h-[60vh] overflow-y-auto pr-1">
                 <div class="bg-indigo-50 p-3 rounded-xl border border-indigo-100">
                     <h4 class="font-bold text-indigo-900 mb-1">1. 変域（表示範囲）の変更</h4>
-                    <p>左パネルの「Xの変域」「Yの変域」数値を変更すると、目盛りとグラフの表示範囲が広がったり縮んだりします。</p>
+                    <p>左パネルの「Xの変域」「Yの変域」数値を変更すると、目盛りとグラフの表示範囲が広がったり縮んだりします（方眼は自動的に正方形に維持されます）。</p>
                 </div>
 
                 <div class="bg-emerald-50 p-3 rounded-xl border border-emerald-100">
@@ -240,7 +239,6 @@
                 { id: 'a1', type: 'h', x1: 0, x2: 2, y: 1, color: '#4f46e5' },
                 { id: 'a2', type: 'v', x: 2, y1: 1, y2: 5, color: '#9333ea' }
             ],
-            // インタラクション用
             dragTarget: null
         };
 
@@ -253,8 +251,7 @@
         const ymaxInput = document.getElementById('ymax');
 
         /**
-         * 中学校・高校数学スタイルの数式文字列をJavaScriptで評価可能な関数に変換
-         * 対応例: "2x + 1", "-x^2 + 4", "1/2x^2 - 3", "(x-2)^2 + 1"
+         * 数式文字列をJavaScript関数に変換（反比例 6/x に完全対応）
          */
         function parseMathExpression(exprStr) {
             if (!exprStr || !exprStr.trim()) return null;
@@ -262,34 +259,29 @@
             if (str.startsWith('y=')) str = str.substring(2);
 
             try {
-                // 1. 2乗の記号 (² -> ^2) を標準化
                 str = str.replace(/²/g, '^2');
 
-                // 2. 分数のカッコ括り (例: -1/2 -> (-1/2))
-                str = str.replace(/(-?\d+)\/(\d+)/g, '($1/$2)');
-
-                // 3. カッコ付き2乗の変換: (式)^2 -> Math.pow(式, 2)
+                // 分数カッコや累乗の基本変換
                 str = str.replace(/\(([^)]+)\)\^2/g, 'Math.pow($1, 2)');
-
-                // 4. 単独xの2乗の変換: x^2 -> Math.pow(x, 2)
                 str = str.replace(/x\^2/g, 'Math.pow(x, 2)');
 
-                // 5. 係数やカッコの直後の乗算記号(*)を補完 (例: 2x -> 2*x, 2Math -> 2*Math)
+                // 係数・数字直後のxやMathへの*補完 (例: 2x -> 2*x)
                 str = str.replace(/(\d|\))([x\(M])/g, '$1*$2');
 
-                // 6. -x や -Math.pow 等の先頭・符号つき項の乗算記号補完
-                str = str.replace(/(^|[+\-*/(])-x/g, '$1-1*x');
-                str = str.replace(/(^|[+\-*/(])\+x/g, '$1+1*x');
-                str = str.replace(/(^|[+\-*/(])x/g, '$1 1*x');
+                // 先頭や+ - *( 直後の単独xへの1*補完（※ / 直後のxは除外して6/xを維持）
+                str = str.replace(/(^|[+\-*(])-x/g, '$1-1*x');
+                str = str.replace(/(^|[+\-*(])\+x/g, '$1+1*x');
+                str = str.replace(/(^|[+\-*(])x/g, '$1 1*x');
 
-                str = str.replace(/(^|[+\-*/(])-Math/g, '$1-1*Math');
-                str = str.replace(/(^|[+\-*/(])\+Math/g, '$1+1*Math');
+                str = str.replace(/(^|[+\-*(])-Math/g, '$1-1*Math');
+                str = str.replace(/(^|[+\-*(])\+Math/g, '$1+1*Math');
 
-                // 安全な評価用関数の作成
                 const fn = new Function('x', `return ${str};`);
-                // テスト評価
-                const testVal = fn(1);
-                if (typeof testVal !== 'number' || isNaN(testVal)) return null;
+                const testVal1 = fn(1);
+                const testVal2 = fn(2);
+                if (typeof testVal1 !== 'number' || isNaN(testVal1) || typeof testVal2 !== 'number' || isNaN(testVal2)) {
+                    return null;
+                }
 
                 return fn;
             } catch (e) {
@@ -297,24 +289,42 @@
             }
         }
 
-        function worldToScreen(wx, wy) {
+        /**
+         * 【正方形グリッド対応】画面サイズと指定変域から共通スケールと中心オフセットを算出
+         */
+        function getScaleAndOffset() {
             const w = canvas.width;
             const h = canvas.height;
-            const sx = ((wx - state.xmin) / (state.xmax - state.xmin)) * w;
-            const sy = h - ((wy - state.ymin) / (state.ymax - state.ymin)) * h;
+            const xRange = Math.max(0.1, state.xmax - state.xmin);
+            const yRange = Math.max(0.1, state.ymax - state.ymin);
+
+            // アスペクト比を1:1に固定するための共通スケール（1単位あたりのピクセル数）
+            const scale = Math.min(w / xRange, h / yRange);
+
+            const cxWorld = (state.xmin + state.xmax) / 2;
+            const cyWorld = (state.ymin + state.ymax) / 2;
+
+            const cxScreen = w / 2;
+            const cyScreen = h / 2;
+
+            return { scale, cxWorld, cyWorld, cxScreen, cyScreen };
+        }
+
+        function worldToScreen(wx, wy) {
+            const { scale, cxWorld, cyWorld, cxScreen, cyScreen } = getScaleAndOffset();
+            const sx = cxScreen + (wx - cxWorld) * scale;
+            const sy = cyScreen - (wy - cyWorld) * scale;
             return { x: sx, y: sy };
         }
 
         function screenToWorld(sx, sy) {
-            const w = canvas.width;
-            const h = canvas.height;
-            const wx = state.xmin + (sx / w) * (state.xmax - state.xmin);
-            const wy = state.ymin + ((h - sy) / h) * (state.ymax - state.ymin);
+            const { scale, cxWorld, cyWorld, cxScreen, cyScreen } = getScaleAndOffset();
+            const wx = cxWorld + (sx - cxScreen) / scale;
+            const wy = cyWorld - (sy - cyScreen) / scale;
             return { x: wx, y: wy };
         }
 
         function render() {
-            // キャンバスサイズ調整
             const rect = canvas.parentElement.getBoundingClientRect();
             if (canvas.width !== rect.width || canvas.height !== rect.height) {
                 canvas.width = rect.width;
@@ -327,40 +337,34 @@
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, w, h);
 
-            // 1. 格子線（グリッド）および目盛りの描画
             drawGrid(w, h);
-
-            // 2. 関数のグラフ描画
             drawFunctions(w, h);
-
-            // 3. 矢印オブジェクトの描画
             drawArrows();
-
-            // 4. 点（吸着点）の描画
             drawPoints();
         }
 
         function drawGrid(w, h) {
             ctx.lineWidth = 1;
 
-            // 1刻みの格子線
-            const xStep = 1;
-            const yStep = 1;
+            // 画面に見えている実際のワールド領域範囲を取得（余白部分も正方形グリッドで埋める）
+            const topLeft = screenToWorld(0, 0);
+            const bottomRight = screenToWorld(w, h);
 
-            // 縦線（x座標）
-            const startX = Math.ceil(state.xmin);
-            const endX = Math.floor(state.xmax);
+            const visXMin = Math.floor(Math.min(topLeft.x, bottomRight.x));
+            const visXMax = Math.ceil(Math.max(topLeft.x, bottomRight.x));
+            const visYMin = Math.floor(Math.min(topLeft.y, bottomRight.y));
+            const visYMax = Math.ceil(Math.max(topLeft.y, bottomRight.y));
 
-            for (let x = startX; x <= endX; x += xStep) {
+            // 縦線 (X軸方向)
+            for (let x = visXMin; x <= visXMax; x++) {
                 const pos = worldToScreen(x, 0);
-                
+
                 ctx.beginPath();
                 ctx.moveTo(pos.x, 0);
                 ctx.lineTo(pos.x, h);
 
                 if (x === 0) {
-                    // Y軸
-                    ctx.strokeStyle = '#1e293b'; // slate-800
+                    ctx.strokeStyle = '#1e293b';
                     ctx.lineWidth = 2.5;
                     ctx.stroke();
 
@@ -372,30 +376,25 @@
                     ctx.lineTo(pos.x + 5, 10);
                     ctx.fill();
 
-                    // ラベル "y"
                     ctx.font = 'bold 13px Inter, sans-serif';
                     ctx.fillStyle = '#1e293b';
                     ctx.fillText('y', pos.x + 10, 15);
                 } else {
-                    ctx.strokeStyle = '#e2e8f0'; // slate-200
+                    ctx.strokeStyle = '#e2e8f0';
                     ctx.lineWidth = 1;
                     ctx.stroke();
 
-                    // X軸目盛り数値
                     const originY = worldToScreen(0, 0).y;
                     const clampedY = Math.max(15, Math.min(h - 15, originY + 15));
                     ctx.font = '10px Inter, sans-serif';
-                    ctx.fillStyle = '#64748b'; // slate-500
+                    ctx.fillStyle = '#64748b';
                     ctx.textAlign = 'center';
                     ctx.fillText(x.toString(), pos.x, clampedY);
                 }
             }
 
-            // 横線（y座標）
-            const startY = Math.ceil(state.ymin);
-            const endY = Math.floor(state.ymax);
-
-            for (let y = startY; y <= endY; y += yStep) {
+            // 横線 (Y軸方向)
+            for (let y = visYMin; y <= visYMax; y++) {
                 const pos = worldToScreen(0, y);
 
                 ctx.beginPath();
@@ -403,8 +402,7 @@
                 ctx.lineTo(w, pos.y);
 
                 if (y === 0) {
-                    // X軸
-                    ctx.strokeStyle = '#1e293b'; // slate-800
+                    ctx.strokeStyle = '#1e293b';
                     ctx.lineWidth = 2.5;
                     ctx.stroke();
 
@@ -416,20 +414,18 @@
                     ctx.lineTo(w - 10, pos.y + 5);
                     ctx.fill();
 
-                    // ラベル "x"
                     ctx.font = 'bold 13px Inter, sans-serif';
                     ctx.fillStyle = '#1e293b';
                     ctx.fillText('x', w - 15, pos.y - 10);
                 } else {
-                    ctx.strokeStyle = '#e2e8f0'; // slate-200
+                    ctx.strokeStyle = '#e2e8f0';
                     ctx.lineWidth = 1;
                     ctx.stroke();
 
-                    // Y軸目盛り数値
                     const originX = worldToScreen(0, 0).x;
                     const clampedX = Math.max(10, Math.min(w - 20, originX - 12));
                     ctx.font = '10px Inter, sans-serif';
-                    ctx.fillStyle = '#64748b'; // slate-500
+                    ctx.fillStyle = '#64748b';
                     ctx.textAlign = 'right';
                     ctx.fillText(y.toString(), clampedX, pos.y + 3);
                 }
@@ -445,8 +441,8 @@
 
         function drawFunctions(w, h) {
             const yRange = state.ymax - state.ymin;
-            const yMinBound = state.ymin - yRange * 2;
-            const yMaxBound = state.ymax + yRange * 2;
+            const yMinBound = state.ymin - yRange * 3;
+            const yMaxBound = state.ymax + yRange * 3;
 
             state.functions.forEach(fnObj => {
                 if (!fnObj.enabled) return;
@@ -459,13 +455,25 @@
                 ctx.lineWidth = 3;
 
                 let isDrawing = false;
-                const stepPx = 1.5; // 描画精度向上
+                let prevWx = null;
+                const stepPx = 1;
 
                 for (let px = 0; px <= w; px += stepPx) {
                     const wx = screenToWorld(px, 0).x;
-                    const wy = evalFn(wx);
 
-                    // 反比例などの漸近線（画面外に飛ぶ場合）を適切に切断
+                    // 反比例における x=0 跨ぎ判定（漸近線の切断）
+                    if (prevWx !== null && prevWx * wx <= 0) {
+                        isDrawing = false;
+                    }
+                    prevWx = wx;
+
+                    let wy = null;
+                    try {
+                        wy = evalFn(wx);
+                    } catch(e) {
+                        wy = null;
+                    }
+
                     if (wy !== null && !isNaN(wy) && isFinite(wy) && wy >= yMinBound && wy <= yMaxBound) {
                         const spos = worldToScreen(wx, wy);
                         if (!isDrawing) {
@@ -486,13 +494,11 @@
             state.points.forEach(pt => {
                 const pos = worldToScreen(pt.x, pt.y);
 
-                // 外側のハロー
                 ctx.beginPath();
                 ctx.arc(pos.x, pos.y, 11, 0, Math.PI * 2);
                 ctx.fillStyle = pt.color + '22';
                 ctx.fill();
 
-                // 本体円
                 ctx.beginPath();
                 ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
                 ctx.fillStyle = pt.color;
@@ -501,7 +507,6 @@
                 ctx.fill();
                 ctx.stroke();
 
-                // 座標表示バッジ（白背景に適合）
                 const labelText = `${pt.label || ''} (${pt.x}, ${pt.y})`;
                 ctx.font = 'bold 11px Inter, sans-serif';
                 const textWidth = ctx.measureText(labelText).width;
@@ -509,7 +514,7 @@
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
                 ctx.strokeStyle = pt.color;
                 ctx.lineWidth = 1.5;
-                
+
                 const bx = pos.x + 12;
                 const by = pos.y - 22;
                 const bw = textWidth + 12;
@@ -526,23 +531,17 @@
         function drawArrows() {
             state.arrows.forEach(arr => {
                 if (arr.type === 'h') {
-                    // 横向き矢印
                     const p1 = worldToScreen(arr.x1, arr.y);
                     const p2 = worldToScreen(arr.x2, arr.y);
 
                     drawSingleArrow(p1.x, p1.y, p2.x, p2.y, arr.color);
-                    
-                    // 端点ハンドル
                     drawHandle(p1.x, p1.y, arr.color);
                     drawHandle(p2.x, p2.y, arr.color);
                 } else if (arr.type === 'v') {
-                    // 縦向き矢印
                     const p1 = worldToScreen(arr.x, arr.y1);
                     const p2 = worldToScreen(arr.x, arr.y2);
 
                     drawSingleArrow(p1.x, p1.y, p2.x, p2.y, arr.color);
-
-                    // 端点ハンドル
                     drawHandle(p1.x, p1.y, arr.color);
                     drawHandle(p2.x, p2.y, arr.color);
                 }
@@ -553,13 +552,12 @@
             ctx.beginPath();
             ctx.strokeStyle = color;
             ctx.lineWidth = 3;
-            ctx.setLineDash([5, 3]); // 破線スタイル
+            ctx.setLineDash([5, 3]);
             ctx.moveTo(x1, y1);
             ctx.lineTo(x2, y2);
             ctx.stroke();
-            ctx.setLineDash([]); // 実線に戻す
+            ctx.setLineDash([]);
 
-            // 矢印の頭（三角）
             const headlen = 10;
             const angle = Math.atan2(y2 - y1, x2 - x1);
             ctx.beginPath();
@@ -605,22 +603,18 @@
             return { sx, sy, ...screenToWorld(sx, sy) };
         }
 
-        // ドラッグ開始判定
         function handleStart(e) {
             const m = getMouseWorldPos(e);
             const hitRadiusPx = 15;
 
-            // 1. 点の判定
             for (let pt of state.points) {
                 const sp = worldToScreen(pt.x, pt.y);
-                const dist = Math.hypot(sp.x - m.sx, sp.y - m.sy);
-                if (dist <= hitRadiusPx) {
+                if (Math.hypot(sp.x - m.sx, sp.y - m.sy) <= hitRadiusPx) {
                     state.dragTarget = { type: 'point', id: pt.id };
                     return;
                 }
             }
 
-            // 2. 矢印のハンドルの判定
             for (let arr of state.arrows) {
                 if (arr.type === 'h') {
                     const sp1 = worldToScreen(arr.x1, arr.y);
@@ -648,252 +642,221 @@
             }
         }
 
-        // ドラッグ移動中（格子点スナップ処理含む）
         function handleMove(e) {
             if (!state.dragTarget) return;
             e.preventDefault();
 
             const m = getMouseWorldPos(e);
-
-            // 【コア機能】格子点（最も近い整数値）へ吸着（スナップ）
             const snapX = Math.round(m.x);
             const snapY = Math.round(m.y);
-
             const target = state.dragTarget;
 
             if (target.type === 'point') {
                 const pt = state.points.find(p => p.id === target.id);
-                if (pt) {
-                    pt.x = snapX;
-                    pt.y = snapY;
-                }
+                if (pt) { pt.x = snapX; pt.y = snapY; }
             } else if (target.type === 'arrow-h-start') {
                 const arr = state.arrows.find(a => a.id === target.id);
-                if (arr) {
-                    arr.x1 = snapX;
-                    arr.y = snapY;
-                }
+                if (arr) { arr.x1 = snapX; arr.y = snapY; }
             } else if (target.type === 'arrow-h-end') {
                 const arr = state.arrows.find(a => a.id === target.id);
-                if (arr) {
-                    arr.x2 = snapX;
-                    arr.y = snapY;
-                }
+                if (arr) { arr.x2 = snapX; arr.y = snapY; }
             } else if (target.type === 'arrow-v-start') {
                 const arr = state.arrows.find(a => a.id === target.id);
-                if (arr) {
-                    arr.x = snapX;
-                    arr.y1 = snapY;
-                }
+                if (arr) { arr.x = snapX; arr.y1 = snapY; }
             } else if (target.type === 'arrow-v-end') {
                 const arr = state.arrows.find(a => a.id === target.id);
-                if (arr) {
-                    arr.x = snapX;
-                    arr.y2 = snapY;
-                }
+                if (arr) { arr.x = snapX; arr.y2 = snapY; }
             }
 
             render();
-            updateItemsListUI();
+            updateItemsList();
         }
 
         function handleEnd() {
             state.dragTarget = null;
         }
 
-        // イベントリスナー登録（マウス＆タッチ）
-        canvas.addEventListener('mousedown', handleStart);
-        canvas.addEventListener('mousemove', handleMove);
-        window.addEventListener('mouseup', handleEnd);
+        // イベントリスナーの登録
+        function setupEventListeners() {
+            window.addEventListener('resize', render);
 
-        canvas.addEventListener('touchstart', handleStart, { passive: false });
-        canvas.addEventListener('touchmove', handleMove, { passive: false });
-        window.addEventListener('touchend', handleEnd);
+            // Canvas ドラッグイベント
+            canvas.addEventListener('mousedown', handleStart);
+            canvas.addEventListener('mousemove', handleMove);
+            window.addEventListener('mouseup', handleEnd);
 
-        // 変域変更
-        function updateBoundsFromUI() {
-            state.xmin = parseFloat(xminInput.value) || -10;
-            state.xmax = parseFloat(xmaxInput.value) || 10;
-            state.ymin = parseFloat(yminInput.value) || -10;
-            state.ymax = parseFloat(ymaxInput.value) || 10;
-            render();
+            canvas.addEventListener('touchstart', handleStart, { passive: false });
+            canvas.addEventListener('touchmove', handleMove, { passive: false });
+            window.addEventListener('touchend', handleEnd);
+
+            // 変域入力イベント
+            [
+                { el: xminInput, key: 'xmin' },
+                { el: xmaxInput, key: 'xmax' },
+                { el: yminInput, key: 'ymin' },
+                { el: ymaxInput, key: 'ymax' }
+            ].forEach(item => {
+                item.el.addEventListener('input', (e) => {
+                    const val = parseFloat(e.target.value);
+                    if (!isNaN(val)) {
+                        state[item.key] = val;
+                        render();
+                    }
+                });
+            });
+
+            // 関数入力イベント
+            [1, 2, 3].forEach(id => {
+                const enableEl = document.getElementById(`fn${id}-enable`);
+                const exprEl = document.getElementById(`fn${id}-expr`);
+
+                enableEl.addEventListener('change', (e) => {
+                    state.functions[id - 1].enabled = e.target.checked;
+                    render();
+                });
+
+                exprEl.addEventListener('input', (e) => {
+                    state.functions[id - 1].expr = e.target.value;
+                    render();
+                });
+            });
+
+            // ツールボタンイベント
+            document.getElementById('add-point-btn').addEventListener('click', () => {
+                const newId = 'p' + Date.now();
+                const labels = ['A', 'B', 'C', 'D', 'E', 'P', 'Q'];
+                const label = labels[state.points.length % labels.length];
+                state.points.push({ id: newId, x: 0, y: 0, color: '#d97706', label: `点${label}` });
+                render();
+                updateItemsList();
+            });
+
+            document.getElementById('add-h-arrow-btn').addEventListener('click', () => {
+                const newId = 'a' + Date.now();
+                state.arrows.push({ id: newId, type: 'h', x1: 0, x2: 3, y: 0, color: '#4f46e5' });
+                render();
+                updateItemsList();
+            });
+
+            document.getElementById('add-v-arrow-btn').addEventListener('click', () => {
+                const newId = 'a' + Date.now();
+                state.arrows.push({ id: newId, type: 'v', x: 0, y1: 0, y2: 3, color: '#9333ea' });
+                render();
+                updateItemsList();
+            });
+
+            document.getElementById('btn-clear-tools').addEventListener('click', () => {
+                state.points = [];
+                state.arrows = [];
+                render();
+                updateItemsList();
+            });
+
+            document.getElementById('btn-reset-all').addEventListener('click', () => {
+                state.xmin = -10; state.xmax = 10;
+                state.ymin = -10; state.ymax = 10;
+                xminInput.value = -10; xmaxInput.value = 10;
+                yminInput.value = -10; ymaxInput.value = 10;
+
+                state.functions[0] = { id: 1, expr: '2x + 1', color: '#2563eb', enabled: true };
+                state.functions[1] = { id: 2, expr: '6/x', color: '#e11d48', enabled: true };
+                state.functions[2] = { id: 3, expr: '-x^2 + 4', color: '#059669', enabled: false };
+
+                document.getElementById('fn1-enable').checked = true;
+                document.getElementById('fn1-expr').value = '2x + 1';
+                document.getElementById('fn2-enable').checked = true;
+                document.getElementById('fn2-expr').value = '6/x';
+                document.getElementById('fn3-enable').checked = false;
+                document.getElementById('fn3-expr').value = '-x^2 + 4';
+
+                state.points = [{ id: 'p1', x: 2, y: 3, color: '#d97706', label: '点A' }];
+                state.arrows = [
+                    { id: 'a1', type: 'h', x1: 0, x2: 2, y: 1, color: '#4f46e5' },
+                    { id: 'a2', type: 'v', x: 2, y1: 1, y2: 5, color: '#9333ea' }
+                ];
+
+                render();
+                updateItemsList();
+            });
+
+            // モーダル管理
+            const helpModal = document.getElementById('help-modal');
+            document.getElementById('btn-help').addEventListener('click', () => helpModal.classList.remove('hidden'));
+            document.getElementById('close-modal-btn').addEventListener('click', () => helpModal.classList.add('hidden'));
+            document.getElementById('confirm-modal-btn').addEventListener('click', () => helpModal.classList.add('hidden'));
         }
 
-        [xminInput, xmaxInput, yminInput, ymaxInput].forEach(inp => {
-            inp.addEventListener('change', updateBoundsFromUI);
-            inp.addEventListener('input', updateBoundsFromUI);
-        });
-
-        // 関数入力バインド
-        [1, 2, 3].forEach(id => {
-            const exprInp = document.getElementById(`fn${id}-expr`);
-            const chk = document.getElementById(`fn${id}-enable`);
-
-            const updateFn = () => {
-                const fn = state.functions.find(f => f.id === id);
-                if (fn) {
-                    fn.expr = exprInp.value;
-                    fn.enabled = chk.checked;
-                }
-                render();
-            };
-
-            exprInp.addEventListener('input', updateFn);
-            chk.addEventListener('change', updateFn);
-        });
-
-        // ボタン：点の追加
-        document.getElementById('add-point-btn').addEventListener('click', () => {
-            const newId = 'p_' + Date.now();
-            const labels = ['A', 'B', 'C', 'D', 'E', 'P', 'Q'];
-            const labelStr = '点' + (labels[state.points.length % labels.length]);
-            
-            state.points.push({
-                id: newId,
-                x: 0,
-                y: 0,
-                color: '#f59e0b',
-                label: labelStr
-            });
-            render();
-            updateItemsListUI();
-        });
-
-        // ボタン：横矢印追加
-        document.getElementById('add-h-arrow-btn').addEventListener('click', () => {
-            state.arrows.push({
-                id: 'a_' + Date.now(),
-                type: 'h',
-                x1: -2,
-                x2: 2,
-                y: 0,
-                color: '#6366f1'
-            });
-            render();
-            updateItemsListUI();
-        });
-
-        // ボタン：縦矢印追加
-        document.getElementById('add-v-arrow-btn').addEventListener('click', () => {
-            state.arrows.push({
-                id: 'a_' + Date.now(),
-                type: 'v',
-                x: 0,
-                y1: -2,
-                y2: 2,
-                color: '#a855f7'
-            });
-            render();
-            updateItemsListUI();
-        });
-
-        // アイテムリストのクリア
-        document.getElementById('btn-clear-tools').addEventListener('click', () => {
-            state.points = [];
-            state.arrows = [];
-            render();
-            updateItemsListUI();
-        });
-
-        // 全リセット
-        document.getElementById('btn-reset-all').addEventListener('click', () => {
-            xminInput.value = -10;
-            xmaxInput.value = 10;
-            yminInput.value = -10;
-            ymaxInput.value = 10;
-
-            document.getElementById('fn1-expr').value = '2x + 1';
-            document.getElementById('fn1-enable').checked = true;
-            document.getElementById('fn2-expr').value = '-x^2 + 4';
-            document.getElementById('fn2-enable').checked = true;
-            document.getElementById('fn3-expr').value = '1/2x^2 - 2';
-            document.getElementById('fn3-enable').checked = false;
-
-            state.points = [{ id: 'p1', x: 0, y: 1, color: '#f59e0b', label: '点A' }];
-            state.arrows = [
-                { id: 'a1', type: 'h', x1: 0, x2: 1, y: 1, color: '#6366f1' },
-                { id: 'a2', type: 'v', x: 1, y1: 1, y2: 3, color: '#a855f7' }
-            ];
-
-            updateBoundsFromUI();
-            updateItemsListUI();
-        });
-
-        function updateItemsListUI() {
-            const listContainer = document.getElementById('items-list');
-            listContainer.innerHTML = '';
+        // 設置中アイテムリストの表示更新
+        function updateItemsList() {
+            const listEl = document.getElementById('items-list');
+            listEl.innerHTML = '';
 
             if (state.points.length === 0 && state.arrows.length === 0) {
-                listContainer.innerHTML = `<div class="text-slate-400 text-center py-2 text-[11px] italic">アイテムはまだ配置されていません</div>`;
+                listEl.innerHTML = '<div class="text-slate-400 text-center py-2 text-[11px] italic">アイテムはまだ配置されていません</div>';
                 return;
             }
 
-            // 点のリスト項目
             state.points.forEach(pt => {
-                const item = document.createElement('div');
-                item.className = 'flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-200';
-                item.innerHTML = `
+                const div = document.createElement('div');
+                div.className = 'flex items-center justify-between bg-amber-50/60 border border-amber-200/80 p-2 rounded-lg';
+                div.innerHTML = `
                     <div class="flex items-center space-x-2">
-                        <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${pt.color}"></span>
+                        <div class="w-2 h-2 rounded-full bg-amber-500"></div>
                         <span class="font-bold text-slate-700">${pt.label}</span>
                         <span class="font-mono text-slate-500">(${pt.x}, ${pt.y})</span>
                     </div>
-                    <button onclick="removePoint('${pt.id}')" class="text-slate-400 hover:text-rose-600 transition">
+                    <button class="delete-btn text-rose-500 hover:text-rose-700" data-type="point" data-id="${pt.id}">
                         <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                     </button>
                 `;
-                listContainer.appendChild(item);
+                listEl.appendChild(div);
             });
 
-            // 矢印のリスト項目
             state.arrows.forEach(arr => {
-                const item = document.createElement('div');
-                item.className = 'flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-200';
+                const div = document.createElement('div');
                 const isH = arr.type === 'h';
-                const label = isH ? '横向き矢印' : '縦向き矢印';
+                div.className = `flex items-center justify-between ${isH ? 'bg-indigo-50/60 border-indigo-200/80' : 'bg-purple-50/60 border-purple-200/80'} border p-2 rounded-lg`;
+                
+                const infoText = isH ? 
+                    `横矢印: x(${arr.x1} → ${arr.x2}), y=${arr.y}` : 
+                    `縦矢印: x=${arr.x}, y(${arr.y1} → ${arr.y2})`;
 
-                item.innerHTML = `
+                div.innerHTML = `
                     <div class="flex items-center space-x-2">
-                        <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${arr.color}"></span>
-                        <span class="font-medium text-slate-700">${label}</span>
+                        <div class="w-2 h-2 rounded-full ${isH ? 'bg-indigo-500' : 'bg-purple-500'}"></div>
+                        <span class="font-mono text-slate-600 text-[11px]">${infoText}</span>
                     </div>
-                    <button onclick="removeArrow('${arr.id}')" class="text-slate-400 hover:text-rose-600 transition">
+                    <button class="delete-btn text-rose-500 hover:text-rose-700" data-type="arrow" data-id="${arr.id}">
                         <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                     </button>
                 `;
-                listContainer.appendChild(item);
+                listEl.appendChild(div);
             });
 
             lucide.createIcons();
+
+            // アイテム消去ボタンイベント
+            listEl.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const btnEl = e.currentTarget;
+                    const type = btnEl.getAttribute('data-type');
+                    const id = btnEl.getAttribute('data-id');
+
+                    if (type === 'point') {
+                        state.points = state.points.filter(p => p.id !== id);
+                    } else if (type === 'arrow') {
+                        state.arrows = state.arrows.filter(a => a.id !== id);
+                    }
+                    render();
+                    updateItemsList();
+                });
+            });
         }
 
-        window.removePoint = function(id) {
-            state.points = state.points.filter(p => p.id !== id);
-            render();
-            updateItemsListUI();
-        };
-
-        window.removeArrow = function(id) {
-            state.arrows = state.arrows.filter(a => a.id !== id);
-            render();
-            updateItemsListUI();
-        };
-
-        // モーダルイベント
-        const helpModal = document.getElementById('help-modal');
-        document.getElementById('btn-help').addEventListener('click', () => helpModal.classList.remove('hidden'));
-        document.getElementById('close-modal-btn').addEventListener('click', () => helpModal.classList.add('hidden'));
-        document.getElementById('confirm-modal-btn').addEventListener('click', () => helpModal.classList.add('hidden'));
-
-        // ウィンドウリサイズ対応
-        window.addEventListener('resize', render);
-
-        // 初期描画実行
-        window.onload = () => {
-            updateBoundsFromUI();
-            updateItemsListUI();
-            render();
-        };
+        // 初期化実行
+        setupEventListeners();
+        render();
+        updateItemsList();
     </script>
 </body>
 </html>
